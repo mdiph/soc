@@ -1,0 +1,1677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOC L1 Bi-Weekly Executive Summary Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<style>
+:root{
+  --ink:#060D18; --panel:#0D1826; --panel-2:#111F31; --line:#1E3149;
+  --copper:#C98A3E; --copper-dim:#8A5F2B; --steel:#6FA3D6;
+  --paper:#E6EDF5; --muted:#8B9EB5;
+  --low:#3F8F6B; --med:#C9A13E; --high:#D9722F; --crit:#C7433B;
+  --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1100px 620px at 78% -12%, rgba(111,163,214,.13), transparent 62%),
+    radial-gradient(760px 480px at 6% 4%, rgba(201,138,62,.10), transparent 60%),
+    var(--ink);
+  color:var(--paper); font-family:var(--sans); font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--steel)}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,24,38,.96),rgba(6,13,24,.72));
+  position:sticky; top:0; z-index:40; backdrop-filter:blur(8px);
+}
+.masthead-in{max-width:1440px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.mark{width:34px;height:26px;flex:none}
+.wordmark{display:flex;flex-direction:column;line-height:1.05}
+.wordmark b{font-weight:600;letter-spacing:.30em;font-size:14px}
+.wordmark span{font-size:10px;letter-spacing:.34em;color:var(--copper);text-transform:uppercase}
+.rule-v{width:1px;height:30px;background:var(--line)}
+.masthead h1{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--paper)}
+.masthead p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.mast-actions{margin-left:auto;display:flex;gap:8px}
+
+/* ---------- shell ---------- */
+.shell{max-width:1440px;margin:0 auto;padding:22px;display:grid;grid-template-columns:minmax(0,1fr) 344px;gap:22px;align-items:start}
+@media (max-width:1080px){.shell{grid-template-columns:1fr}}
+
+section.card{
+  background:linear-gradient(180deg,var(--panel),rgba(13,24,38,.55));
+  border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden;
+}
+.card-head{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+.card-head .idx{font-family:var(--mono);font-size:11px;color:var(--copper);letter-spacing:.1em}
+.card-head h2{margin:0;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.card-head .hint{margin-left:auto;font-size:12px;color:var(--muted)}
+.card-body{padding:18px}
+
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:720px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+label.f{display:block}
+label.f > span.lbl{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.lbl-solo{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+input[type=text],input[type=number],input[type=date],select,textarea{
+  width:100%;background:#08121F;color:var(--paper);border:1px solid var(--line);border-radius:6px;
+  padding:9px 11px;font-family:var(--sans);font-size:14px;
+}
+input[type=number],input.mono{font-family:var(--mono)}
+textarea{resize:vertical;min-height:74px;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--steel);outline-offset:1px;border-color:var(--steel)}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 51%,calc(100% - 11px) 51%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.help{font-size:12px;color:var(--muted);margin:6px 0 0}
+
+.btn{
+  display:inline-flex;align-items:center;gap:7px;background:#132437;color:var(--paper);
+  border:1px solid var(--line);border-radius:6px;padding:8px 13px;font-size:13px;font-family:var(--sans);
+  cursor:pointer;transition:border-color .15s,background .15s;
+}
+.btn:hover{border-color:var(--steel);background:#17293e}
+.btn:focus-visible{outline:2px solid var(--steel);outline-offset:2px}
+.btn.ghost{background:transparent}
+.btn.copper{background:var(--copper);border-color:var(--copper);color:#160D02;font-weight:600}
+.btn.copper:hover{background:#dc9b4b;border-color:#dc9b4b}
+.btn.danger{color:#E58C86;border-color:#3a2028;background:transparent;padding:6px 9px}
+.btn.danger:hover{border-color:var(--crit);background:rgba(199,67,59,.12)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+.check{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--paper);cursor:pointer}
+.check input{accent-color:var(--copper);width:16px;height:16px;margin-top:2px;flex:none}
+.check-list{display:flex;flex-direction:column;gap:10px}
+
+/* ---------- dropzone ---------- */
+.drop{
+  border:1px dashed #2A4362;border-radius:8px;padding:20px;text-align:center;cursor:pointer;
+  background:rgba(111,163,214,.03);transition:border-color .15s,background .15s;
+}
+.drop:hover,.drop.over{border-color:var(--copper);background:rgba(201,138,62,.07)}
+.drop strong{display:block;font-size:13.5px;font-weight:600}
+.drop small{color:var(--muted)}
+.chip{
+  display:inline-flex;align-items:center;gap:9px;background:#0A1728;border:1px solid var(--line);
+  border-radius:999px;padding:6px 8px 6px 13px;font-size:12.5px;font-family:var(--mono);margin-top:12px;
+}
+.chip b{font-weight:500;color:var(--steel)}
+.cover-prev{display:flex;gap:14px;align-items:flex-start;margin-top:12px}
+.cover-prev img{width:98px;border:1px solid var(--line);border-radius:4px;display:block}
+
+/* ---------- repeatable rows ---------- */
+.rows{display:flex;flex-direction:column;gap:12px}
+.row-item{border:1px solid var(--line);border-radius:8px;background:#0A1728;padding:13px}
+.row-top{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.row-n{font-family:var(--mono);font-size:11px;color:var(--copper);letter-spacing:.08em}
+.row-top .spacer{flex:1}
+.empty{border:1px dashed #24384f;border-radius:8px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ---------- board ---------- */
+.board{position:sticky;top:82px}
+.board .card-body{padding:16px 18px}
+.stat-line{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(30,49,73,.6)}
+.stat-line:last-child{border-bottom:0}
+.stat-line span{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.stat-line b{font-family:var(--mono);font-size:17px;font-weight:500}
+.sub-h{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--copper);margin:16px 0 6px}
+
+/* signature: severity ladder */
+.ladder{margin-top:14px}
+.ladder-h{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.lvl{display:grid;grid-template-columns:26px 1fr 62px;align-items:center;gap:9px;padding:1.5px 0}
+.lvl i{font-family:var(--mono);font-size:11px;font-style:normal;color:var(--muted);text-align:right}
+.lvl .bar{height:7px;border-radius:2px;background:rgba(255,255,255,.045);overflow:hidden}
+.lvl .bar>i{display:block;height:100%;border-radius:2px}
+.lvl u{font-family:var(--mono);font-size:11px;text-decoration:none;color:var(--paper);text-align:right;opacity:.85}
+.buckets{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}
+.bk{border:1px solid var(--line);border-radius:6px;padding:8px 7px;text-align:center;background:#0A1728}
+.bk em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.bk b{font-family:var(--mono);font-size:15px;font-weight:500;display:block;margin-top:3px}
+.status-msg{margin-top:12px;font-size:12.5px;min-height:18px}
+.status-msg.ok{color:#7BC79E}
+.status-msg.err{color:#E58C86}
+.board .btn.copper{width:100%;justify-content:center;margin-top:16px;padding:11px}
+.progress{height:2px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px;display:none}
+.progress.on{display:block}
+.progress>i{display:block;height:100%;width:35%;background:var(--copper);animation:slide 1.05s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@media (prefers-reduced-motion:reduce){.progress>i{animation:none;width:100%}}
+
+/* slide manifest */
+.deck{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.deck-row{display:grid;grid-template-columns:24px 1fr;gap:9px;align-items:baseline;padding:4px 0;border-bottom:1px solid rgba(30,49,73,.45);font-size:12.5px}
+.deck-row:last-child{border-bottom:0}
+.deck-row i{font-family:var(--mono);font-style:normal;font-size:10.5px;color:var(--copper)}
+.deck-row.off{opacity:.35}
+.deck-row.off i{color:var(--muted)}
+.deck-row small{display:block;color:var(--muted);font-size:11px}
+
+.footnote{max-width:1440px;margin:0 auto;padding:8px 22px 40px;color:var(--muted);font-size:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <svg class="mark" viewBox="0 0 40 30" aria-hidden="true"><path d="M8 26 L15 4 h10 l7 22 h-8 l-4-13 -4 13 z" fill="none" stroke="#C98A3E" stroke-width="2.6" stroke-linejoin="round"/></svg>
+    <div class="wordmark"><b>HERITAGE</b><span>Minerals</span></div>
+    <div class="rule-v"></div>
+    <div>
+      <h1>SOC L1 Bi-Weekly Executive Summary Builder</h1>
+      <p>Load the alert and case exports, set the reporting period, generate the PowerPoint deck.</p>
+    </div>
+    <div class="mast-actions">
+      <button class="btn ghost" id="btnSave" type="button">Save draft</button>
+      <button class="btn ghost" id="btnLoad" type="button">Load draft</button>
+      <input type="file" id="fileDraft" accept="application/json,.json" class="sr">
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+<div>
+
+  <!-- 00 OUTPUT FILE -->
+  <section class="card">
+    <div class="card-head"><span class="idx">00</span><h2>Output file</h2><span class="hint">Name of the .pptx you get</span></div>
+    <div class="card-body">
+      <label class="f"><span class="lbl">File name</span><input type="text" id="fileName" placeholder="Leave blank to name it automatically"></label>
+      <p class="help">Saves as <b id="filePreview" style="font-family:var(--mono);color:var(--steel);font-weight:400">deck.pptx</b> — the .pptx extension is added for you, and characters Windows rejects in file names are replaced with a hyphen.</p>
+    </div>
+  </section>
+
+  <!-- 01 SOURCES -->
+  <section class="card">
+    <div class="card-head"><span class="idx">01</span><h2>Source files</h2><span class="hint">Alert export required</span></div>
+    <div class="card-body">
+      <div class="grid g3">
+        <div>
+          <span class="lbl-solo">Alert export (.xlsx / .csv)</span>
+          <div class="drop" id="dropAlerts" tabindex="0" role="button" aria-label="Choose alert export file">
+            <strong>Drop the alert export here</strong>
+            <small>Needs Rule ID, Description, Level, Count</small>
+          </div>
+          <input type="file" id="fileAlerts" accept=".xlsx,.xlsm,.csv" class="sr">
+          <div id="alertChip"></div>
+        </div>
+        <div>
+          <span class="lbl-solo">Case export (.xlsx / .csv)</span>
+          <div class="drop" id="dropCases" tabindex="0" role="button" aria-label="Choose case export file">
+            <strong>Drop the case export here</strong>
+            <small>Needs Number, Severity, Status, Root Cause, Reported at</small>
+          </div>
+          <input type="file" id="fileCases" accept=".xlsx,.xlsm,.csv" class="sr">
+          <div id="caseChip"></div>
+        </div>
+        <div>
+          <span class="lbl-solo">Cover image (optional)</span>
+          <div class="drop" id="dropCover" tabindex="0" role="button" aria-label="Choose cover image">
+            <strong>Drop the cover PNG/JPG here</strong>
+            <small>Fills slide 1 edge to edge</small>
+          </div>
+          <input type="file" id="fileCover" accept="image/png,image/jpeg" class="sr">
+          <div id="coverPrev"></div>
+        </div>
+      </div>
+      <p class="help">Everything is read in your browser. Cases are filtered to the reporting period in section 02; alerts are used whole, because the export has no timestamps.</p>
+    </div>
+  </section>
+
+  <!-- 02 PERIOD -->
+  <section class="card">
+    <div class="card-head"><span class="idx">02</span><h2>Reporting period &amp; header</h2></div>
+    <div class="card-body">
+      <div class="grid g3">
+        <label class="f"><span class="lbl">Customer</span><input type="text" id="customer" value="Heritage Minerals"></label>
+        <label class="f"><span class="lbl">Period start</span><input type="date" id="periodStart"></label>
+        <label class="f"><span class="lbl">Period end</span><input type="date" id="periodEnd"></label>
+        <label class="f"><span class="lbl">Report title</span><input type="text" id="deckTitle" value="SOC Bi-Weekly Executive Summary"></label>
+        <label class="f"><span class="lbl">Report status</span>
+          <select id="reportStatus"><option>Final</option><option>Draft</option><option>Interim</option></select>
+        </label>
+        <label class="f"><span class="lbl">Overall security posture</span>
+          <select id="posture"><option>Stable</option><option selected>Elevated</option><option>Under pressure</option><option>Critical</option></select>
+        </label>
+        <label class="f"><span class="lbl">Prepared by</span><input type="text" id="preparedBy" placeholder="e.g. SOC L1 Team — Peris.AI"></label>
+        <label class="f"><span class="lbl">Reviewed by</span><input type="text" id="reviewedBy" placeholder="e.g. SOC Lead"></label>
+        <label class="f"><span class="lbl">Analysts on shift</span><input type="text" id="analysts" placeholder="Auto from the case owners"></label>
+      </div>
+      <div class="btn-row">
+        <button class="btn" type="button" id="btnPeriodFromCases">Set period from the case export</button>
+        <button class="btn" type="button" id="btnPeriodLast14">Use the last 14 days</button>
+        <button class="btn" type="button" id="btnAnalysts">Fill analysts from case owners</button>
+      </div>
+      <p class="help">Leave both dates blank to include every case in the export.</p>
+    </div>
+  </section>
+
+  <!-- 03 EXECUTIVE SUMMARY -->
+  <section class="card">
+    <div class="card-head"><span class="idx">03</span><h2>Executive summary</h2><span class="hint">Slide 2</span></div>
+    <div class="card-body">
+      <label class="f"><span class="lbl">Summary narrative</span>
+        <textarea id="narrative" placeholder="Two or three sentences an executive can read in fifteen seconds. Leave blank and one is written from the numbers."></textarea>
+      </label>
+      <div class="btn-row"><button class="btn" type="button" id="btnDraftNarrative">Draft one from the data</button></div>
+    </div>
+  </section>
+
+  <!-- 04 ALERTS -->
+  <section class="card">
+    <div class="card-head"><span class="idx">04</span><h2>Alert slides</h2><span class="hint">Slides 3 – 6</span></div>
+    <div class="card-body">
+      <div class="grid g3">
+        <label class="f"><span class="lbl">Top alerts to list</span><input type="number" id="topN" min="3" max="30" value="15"></label>
+        <label class="f"><span class="lbl">Priority threshold (level ≥)</span><input type="number" id="threshold" min="1" max="15" value="8"></label>
+        <label class="f"><span class="lbl">Description width</span>
+          <select id="descWidth"><option value="60">Trim to 60 characters</option><option value="76" selected>Trim to 76 characters</option><option value="92">Trim to 92 characters</option></select>
+        </label>
+      </div>
+      <div class="check-list" style="margin-top:16px">
+        <label class="check"><input type="checkbox" id="incSeverity" checked><span>Alert severity overview — Low / Medium / High / Critical split with the level ladder</span></label>
+        <label class="check"><input type="checkbox" id="incPriority" checked><span>Priority alerts — every rule at or above the threshold level</span></label>
+        <label class="check"><input type="checkbox" id="incTop" checked><span>Top alerts by volume — the noisiest rules of the period</span></label>
+        <label class="check"><input type="checkbox" id="incNotes" checked><span>Alerts worth a second look — unusual medium and low severity rules</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 SECOND-LOOK ROWS -->
+  <section class="card">
+    <div class="card-head"><span class="idx">05</span><h2>Alerts worth a second look</h2><span class="hint" id="cntNote">0 rows</span></div>
+    <div class="card-body">
+      <p class="help" style="margin:0 0 12px">Optional. Medium or low severity rules that still deserve a mention — a rule that fired once but shouldn't have, a new source, a pattern the volume charts hide.</p>
+      <div class="rows" id="rowsNote"></div>
+      <div class="btn-row">
+        <button class="btn" type="button" id="addNote">Add a row</button>
+        <button class="btn" type="button" id="seedNote">Suggest from medium and low alerts</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 CASES -->
+  <section class="card">
+    <div class="card-head"><span class="idx">06</span><h2>Case slides</h2><span class="hint">Slides 7 – 9</span></div>
+    <div class="card-body">
+      <div class="check-list">
+        <label class="check"><input type="checkbox" id="incCaseOverview" checked><span>Case volume and severity — raised, resolved, still open, time to close</span></label>
+        <label class="check"><input type="checkbox" id="incCaseResolution" checked><span>How cases were resolved — root cause, verdict, analyst split</span></label>
+        <label class="check"><input type="checkbox" id="incCaseDetail" checked><span>Critical and high case register — one row per case</span></label>
+      </div>
+      <label class="f" style="margin-top:16px"><span class="lbl">Resolution notes</span>
+        <textarea id="resolutionNotes" placeholder="How the team worked the queue this period — triage path, what got escalated to L2, what was closed at L1. Leave blank to skip the note."></textarea>
+      </label>
+      <div class="grid g2" style="margin-top:14px">
+        <label class="f"><span class="lbl">Case register severity floor</span>
+          <select id="registerFloor"><option value="high" selected>Critical and high only</option><option value="medium">Critical, high and medium</option><option value="all">Every case</option></select>
+        </label>
+        <label class="f"><span class="lbl">Register row cap</span><input type="number" id="registerCap" min="5" max="16" value="14"></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 CLOSING -->
+  <section class="card">
+    <div class="card-head"><span class="idx">07</span><h2>Recommendations &amp; closing</h2><span class="hint">Slides 10 – 11</span></div>
+    <div class="card-body">
+      <div class="grid g2">
+        <label class="f"><span class="lbl">Recommendations</span><textarea id="recs" placeholder="One per line — each line becomes a bullet."></textarea></label>
+        <label class="f"><span class="lbl">Watch items &amp; constraints</span><textarea id="issues" placeholder="One per line — each line becomes a bullet."></textarea></label>
+      </div>
+      <div class="check-list" style="margin-top:16px">
+        <label class="check"><input type="checkbox" id="incRecs" checked><span>Recommendations slide</span></label>
+        <label class="check"><input type="checkbox" id="incClosing" checked><span>Closing slide with the sign-off block</span></label>
+      </div>
+      <label class="f" style="margin-top:14px"><span class="lbl">Closing line</span><input type="text" id="closingLine" placeholder="Proactive Monitoring. Stronger Protection."></label>
+    </div>
+  </section>
+
+</div>
+
+<!-- BOARD -->
+<aside class="board">
+  <section class="card">
+    <div class="card-head"><span class="idx">→</span><h2>Period board</h2></div>
+    <div class="card-body">
+      <div id="boardEmpty" class="empty">No export loaded yet. Drop the alert xlsx in section 01 and the numbers land here.</div>
+
+      <div id="boardAlerts" style="display:none">
+        <div class="sub-h">Alerts</div>
+        <div class="stat-line"><span>Total events</span><b id="sTotal">0</b></div>
+        <div class="stat-line"><span>Unique rules</span><b id="sRules">0</b></div>
+        <div class="stat-line"><span>Priority rules</span><b id="sPriority">0</b></div>
+        <div class="buckets" id="sBuckets"></div>
+        <div class="ladder">
+          <div class="ladder-h"><span>Level</span><span>Events</span></div>
+          <div id="sLadder"></div>
+        </div>
+      </div>
+
+      <div id="boardCases" style="display:none">
+        <div class="sub-h">Cases in period</div>
+        <div class="stat-line"><span>Raised</span><b id="cRaised">0</b></div>
+        <div class="stat-line"><span>Resolved</span><b id="cResolved">0</b></div>
+        <div class="stat-line"><span>Still open</span><b id="cOpen">0</b></div>
+        <div class="stat-line"><span>Median time to close</span><b id="cMttr">—</b></div>
+        <div class="buckets" id="cSev"></div>
+      </div>
+
+      <div class="sub-h">Deck</div>
+      <div class="deck" id="deckList"></div>
+
+      <button class="btn copper" type="button" id="btnGenerate">Generate PowerPoint</button>
+      <div class="progress" id="prog"><i></i></div>
+      <div class="status-msg" id="msg" role="status" aria-live="polite"></div>
+    </div>
+  </section>
+</aside>
+</main>
+
+<p class="footnote">Everything stays in the browser — the exports are parsed locally and the .pptx is assembled locally. Nothing is uploaded.</p>
+
+<script>
+/* ============================================================
+   State and small helpers
+   ============================================================ */
+const state = { alerts:[], stats:null, cases:[], alertFile:"", caseFile:"", cover:null };
+
+const $  = (id)=>document.getElementById(id);
+const nf = (n)=>Number(n||0).toLocaleString('en-US');
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const MON_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const BUCKETS = [
+  {key:"Low",      min:0,  max:3,  hex:"3F8F6B"},
+  {key:"Medium",   min:4,  max:7,  hex:"C9A13E"},
+  {key:"High",     min:8,  max:11, hex:"D9722F"},
+  {key:"Critical", min:12, max:15, hex:"C7433B"}
+];
+const bucketOf = (lvl)=> (BUCKETS.find(b=>lvl>=b.min&&lvl<=b.max) || BUCKETS[3]).key;
+const bucketHex = (key)=> (BUCKETS.find(b=>b.key===key) || BUCKETS[3]).hex;
+
+const CASE_SEV = [
+  {key:"critical", label:"Critical", hex:"C7433B"},
+  {key:"high",     label:"High",     hex:"D9722F"},
+  {key:"medium",   label:"Medium",   hex:"C9A13E"},
+  {key:"low",      label:"Low",      hex:"3F8F6B"},
+  {key:"info",     label:"Info",     hex:"6FA3D6"}
+];
+const sevMeta = (s)=>{
+  const k = String(s||"").trim().toLowerCase();
+  return CASE_SEV.find(x=>k.startsWith(x.key)) || {key:k||"unset", label:(s? String(s):"Unset"), hex:"8B9EB5"};
+};
+
+const trim = (s,n)=> (!n || String(s).length<=n) ? String(s) : String(s).slice(0,n-1).trimEnd()+"\u2026";
+const clean = (s)=> String(s==null?"":s)
+  .replace(/&nbsp;/gi," ").replace(/<br\s*\/?>/gi," ").replace(/<[^>]+>/g," ")
+  .replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&quot;/gi,'"')
+  .replace(/\s+/g," ").trim();
+
+/* ============================================================
+   Column matching — shared by both exports
+   ============================================================ */
+function buildMatcher(hints){
+  return function(header){
+    const h = String(header||"").trim().toLowerCase();
+    if(!h) return null;
+    for(const key in hints) if(hints[key].exact.indexOf(h) !== -1) return key;
+    for(const key in hints) if(hints[key].loose.some(x=>h.indexOf(x) !== -1)) return key;
+    return null;
+  };
+}
+function findColumns(matrix, matcher, required){
+  for(let r=0; r<Math.min(matrix.length,15); r++){
+    const found = {};
+    (matrix[r]||[]).forEach((cellVal,c)=>{
+      const k = matcher(cellVal);
+      if(k && found[k]===undefined) found[k]=c;
+    });
+    if(required.every(k=>found[k]!==undefined)) return {headerRow:r, map:found};
+  }
+  return null;
+}
+
+const ALERT_HINTS = {
+  id:   {exact:["rule id","ruleid","rule.id","rule_id","id","sid","signature id"], loose:["rule id","signature"]},
+  desc: {exact:["description","rule description","rule.description","alert","message","event","name"], loose:["description","message"]},
+  lvl:  {exact:["level","rule level","rule.level","severity","sev","priority"], loose:["level","severity"]},
+  cnt:  {exact:["count","total","events","doc_count","hits","volume","frequency"], loose:["count","total","events","hits"]}
+};
+const CASE_HINTS = {
+  num:   {exact:["number","case number","case id","case","id","ticket","ticket id","ref"], loose:["case number","case id","ticket"]},
+  status:{exact:["status","state","case status"], loose:["status"]},
+  unit:  {exact:["unit","team","group","queue"], loose:["unit"]},
+  owner: {exact:["owner","analyst","assignee","assigned to","handled by"], loose:["owner","analyst","assignee"]},
+  sev:   {exact:["severity","priority","criticality","case severity"], loose:["severity","priority"]},
+  cls:   {exact:["classification","category","case type"], loose:["classification","category"]},
+  root:  {exact:["root cause","rootcause","root_cause","cause","resolution"], loose:["root cause","resolution"]},
+  title: {exact:["title","subject","summary","case title","short description"], loose:["title","subject"]},
+  desc:  {exact:["description","details","detail","notes","body"], loose:["description","detail"]},
+  tags:  {exact:["tags","tag","labels","label","mitre"], loose:["tags","labels"]},
+  rep:   {exact:["reported at","reported","created at","created","opened at","opened","open time","date"], loose:["reported","created","opened"]},
+  dur:   {exact:["duration","ttr","response time","time to respond"], loose:["duration"]},
+  close: {exact:["closed at","closed","resolved at","resolved","close time"], loose:["closed","resolved at"]}
+};
+const matchAlertCol = buildMatcher(ALERT_HINTS);
+const matchCaseCol  = buildMatcher(CASE_HINTS);
+
+/* ============================================================
+   Parsing
+   ============================================================ */
+function parseAlertSheet(matrix){
+  const hit = findColumns(matrix, matchAlertCol, ["desc","cnt"]);
+  if(!hit) throw new Error("Could not find the header row. The alert sheet needs columns for description, level and count.");
+  const {headerRow, map} = hit;
+  const out = [];
+  for(let r=headerRow+1; r<matrix.length; r++){
+    const row = matrix[r] || [];
+    const desc = clean(row[map.desc]);
+    const cnt  = Number(String(row[map.cnt] == null ? "" : row[map.cnt]).replace(/[, ]/g,""));
+    if(!desc && !cnt) continue;
+    if(!isFinite(cnt)) continue;
+    out.push({
+      id: String(row[map.id] == null ? "" : row[map.id]).trim(),
+      desc,
+      level: Math.max(0, Math.min(15, Math.round(Number(row[map.lvl] || 0)) || 0)),
+      count: Math.round(cnt) || 0
+    });
+  }
+  if(!out.length) throw new Error("The alert header was found but no data rows followed it.");
+  return out;
+}
+
+const MON_LOOKUP = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function parseDT(v){
+  if(v == null || v === "") return null;
+  if(v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  if(typeof v === "number" && isFinite(v)){
+    const d = new Date(Math.round((v - 25569) * 86400000));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const s = String(v).trim();
+  if(!s) return null;
+  // 20 Aug 2026 19:26:28  /  20 August 2026
+  let m = s.match(/^(\d{1,2})[\s\-]+([A-Za-z]{3,})[\s\-]+(\d{4})(?:[\s,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    const mo = MON_LOOKUP[m[2].slice(0,3).toLowerCase()];
+    if(mo !== undefined) return new Date(+m[3], mo, +m[1], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+  }
+  // Aug 20, 2026 19:26
+  m = s.match(/^([A-Za-z]{3,})[\s\-]+(\d{1,2}),?[\s\-]+(\d{4})(?:[\s,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    const mo = MON_LOOKUP[m[1].slice(0,3).toLowerCase()];
+    if(mo !== undefined) return new Date(+m[3], mo, +m[2], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+  }
+  // 2026-08-20 19:26:28  /  2026/08/20
+  m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m) return new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function parseCaseSheet(matrix){
+  const hit = findColumns(matrix, matchCaseCol, ["sev"]);
+  if(!hit) throw new Error("Could not find the header row. The case sheet needs at least a severity column.");
+  const {headerRow, map} = hit;
+  const pick = (row,key)=> map[key]===undefined ? "" : clean(row[map[key]]);
+  const out = [];
+  for(let r=headerRow+1; r<matrix.length; r++){
+    const row = matrix[r] || [];
+    const sev = pick(row,"sev");
+    const num = pick(row,"num");
+    const title = pick(row,"title");
+    if(!sev && !num && !title) continue;
+    const reported = map.rep===undefined ? null : parseDT(row[map.rep]);
+    const closed   = map.close===undefined ? null : parseDT(row[map.close]);
+    out.push({
+      num, title,
+      status: pick(row,"status"),
+      unit:   pick(row,"unit"),
+      owner:  pick(row,"owner"),
+      sev,
+      cls:    pick(row,"cls"),
+      root:   pick(row,"root") || "Unclassified",
+      tags:   pick(row,"tags"),
+      desc:   pick(row,"desc"),
+      reported, closed,
+      hours: (reported && closed && closed >= reported) ? (closed - reported)/3600000 : null
+    });
+  }
+  if(!out.length) throw new Error("The case header was found but no data rows followed it.");
+  return out;
+}
+
+/* ============================================================
+   Derived numbers
+   ============================================================ */
+function computeStats(alerts){
+  const totalEvents = alerts.reduce((s,a)=>s+a.count,0);
+  const levels = Array.from({length:16},(_,i)=>({level:i,rules:0,events:0}));
+  alerts.forEach(a=>{ levels[a.level].rules++; levels[a.level].events += a.count; });
+  const buckets = BUCKETS.map(b=>{
+    const slice = alerts.filter(a=>a.level>=b.min && a.level<=b.max);
+    const events = slice.reduce((s,a)=>s+a.count,0);
+    return {key:b.key, hex:b.hex, range:b.min+"\u2013"+b.max, rules:slice.length, events,
+            pct: totalEvents ? (events/totalEvents*100) : 0};
+  });
+  return {
+    totalEvents, ruleCount: alerts.length, levels, buckets,
+    sorted: alerts.slice().sort((a,b)=>b.count-a.count),
+    byRisk: alerts.slice().sort((a,b)=> b.level-a.level || b.count-a.count)
+  };
+}
+
+const SOURCE_RULES = [
+  [/fortipam/i,"FortiPAM"], [/fortigate|fortinet/i,"FortiGate"],
+  [/envoy proxy|vmware envoy/i,"VMware Envoy"],
+  [/vmware vcenter|vcenter|vpxa|hostd|healthd|kmxa/i,"VMware vCenter"],
+  [/active directory|domain administrator|domain admins/i,"Active Directory"],
+  [/office ?365|exchange|sharepoint|azure active/i,"Microsoft 365"],
+  [/veeam/i,"Veeam Backup"], [/registry|integrity checksum|\bfim\b/i,"Wazuh FIM"],
+  [/windows|logon|logoff|shadow copy|\bvss\b/i,"Windows"],
+  [/web server|http|apache|nginx/i,"Web Server"], [/syslog/i,"Syslog"]
+];
+const SEV_WORD = /^(high|medium|low|critical|info|informational|warning|warn|alert|audit|notice|error)$/i;
+function guessSource(desc){
+  const m = String(desc).match(/^([A-Za-z0-9 .\-]{2,28}):/);
+  if(m){
+    const prefix = m[1].trim().replace(/\s+(high|medium|low|critical|info|warning|alert|audit)$/i,'').trim();
+    if(prefix && !SEV_WORD.test(prefix)) return prefix;
+  }
+  for(let i=0;i<SOURCE_RULES.length;i++) if(SOURCE_RULES[i][0].test(desc)) return SOURCE_RULES[i][1];
+  return "SIEM";
+}
+
+const RESOLVED_WORDS = /^(closed|resolved|done|completed|complete)/i;
+function verdictOf(c){
+  const t = (c.tags + " " + c.root + " " + c.title).toLowerCase();
+  if(/false[\s\-_]?positive/.test(t)) return "False positive";
+  if(/true[\s\-_]?positive/.test(t)) return "True positive";
+  if(/legitimate|authorized|authorised|expected|routine|benign|informational/.test(t)) return "Benign or expected";
+  return "Reviewed and closed";
+}
+function tally(list, keyFn){
+  const map = new Map();
+  list.forEach(item=>{
+    const k = keyFn(item) || "Unclassified";
+    map.set(k, (map.get(k)||0)+1);
+  });
+  return Array.from(map, ([label,count])=>({label,count})).sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label));
+}
+function median(nums){
+  const arr = nums.filter(n=>typeof n === "number" && isFinite(n)).sort((a,b)=>a-b);
+  if(!arr.length) return null;
+  const mid = arr.length>>1;
+  return arr.length%2 ? arr[mid] : (arr[mid-1]+arr[mid])/2;
+}
+function fmtHours(h){
+  if(h == null) return "\u2014";
+  if(h < 1) return Math.round(h*60) + "m";
+  if(h < 48) return (h<10 ? h.toFixed(1) : Math.round(h)) + "h";
+  return (h/24).toFixed(1) + "d";
+}
+
+function periodRange(){
+  const a = $('periodStart').value, b = $('periodEnd').value;
+  const start = a ? new Date(a+"T00:00:00") : null;
+  const end   = b ? new Date(b+"T23:59:59") : null;
+  return {start, end};
+}
+function casesInPeriod(){
+  const {start, end} = periodRange();
+  return state.cases.filter(c=>{
+    if(!c.reported) return !start && !end;
+    if(start && c.reported < start) return false;
+    if(end && c.reported > end) return false;
+    return true;
+  });
+}
+function computeCaseStats(list){
+  const resolved = list.filter(c=>RESOLVED_WORDS.test(c.status) || (!c.status && c.closed));
+  const open = list.filter(c=>resolved.indexOf(c) === -1);
+  const hours = resolved.map(c=>c.hours).filter(h=>h != null);
+  const within24 = hours.filter(h=>h<=24).length;
+  const sev = CASE_SEV.map(s=>({
+    key:s.key, label:s.label, hex:s.hex,
+    count: list.filter(c=>sevMeta(c.sev).key === s.key).length
+  })).filter(s=>s.count>0);
+  const other = list.length - sev.reduce((n,s)=>n+s.count,0);
+  if(other > 0) sev.push({key:"unset", label:"Unset", hex:"8B9EB5", count:other});
+  return {
+    total:list.length,
+    resolved:resolved.length,
+    open:open.length,
+    rate: list.length ? (resolved.length/list.length*100) : 0,
+    medianHours: median(hours),
+    meanHours: hours.length ? hours.reduce((s,h)=>s+h,0)/hours.length : null,
+    fastest: hours.length ? Math.min.apply(null,hours) : null,
+    slowest: hours.length ? Math.max.apply(null,hours) : null,
+    within24, within24Pct: hours.length ? within24/hours.length*100 : 0,
+    sev,
+    roots: tally(list, c=>c.root),
+    verdicts: tally(list, verdictOf),
+    owners: tally(list.filter(c=>c.owner), c=>c.owner),
+    list
+  };
+}
+
+/* ============================================================
+   File intake
+   ============================================================ */
+function wireDrop(zoneId, inputId, handler){
+  const zone = $(zoneId), input = $(inputId);
+  zone.addEventListener('click', ()=>input.click());
+  zone.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); input.click(); } });
+  ['dragenter','dragover'].forEach(ev=>zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', e=>{ const f = e.dataTransfer.files[0]; if(f) handler(f); });
+  input.addEventListener('change', e=>{ const f = e.target.files[0]; if(f) handler(f); });
+}
+
+async function readSheet(file){
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, {header:1, blankrows:false, defval:""});
+}
+
+async function loadAlerts(file){
+  try{
+    state.alerts = parseAlertSheet(await readSheet(file));
+    state.stats = computeStats(state.alerts);
+    state.alertFile = file.name;
+    $('alertChip').innerHTML = '<div class="chip"><b>'+esc(file.name)+'</b> '+nf(state.alerts.length)+' rules</div>';
+    setMsg('Alert export loaded — '+nf(state.alerts.length)+' rules, '+nf(state.stats.totalEvents)+' events.','ok');
+  }catch(err){
+    state.alerts=[]; state.stats=null; $('alertChip').innerHTML='';
+    setMsg(err.message,'err');
+  }
+  renderBoard();
+}
+
+async function loadCases(file){
+  try{
+    state.cases = parseCaseSheet(await readSheet(file));
+    state.caseFile = file.name;
+    $('caseChip').innerHTML = '<div class="chip"><b>'+esc(file.name)+'</b> '+nf(state.cases.length)+' cases</div>';
+    if(!$('periodStart').value && !$('periodEnd').value) periodFromCases();
+    if(!$('analysts').value.trim()) fillAnalysts();
+    setMsg('Case export loaded — '+nf(state.cases.length)+' cases.','ok');
+  }catch(err){
+    state.cases=[]; $('caseChip').innerHTML='';
+    setMsg(err.message,'err');
+  }
+  renderBoard();
+}
+
+function loadCover(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      state.cover = {dataUrl: reader.result, w: img.naturalWidth, h: img.naturalHeight, name: file.name};
+      renderCover();
+    };
+    img.onerror = ()=>setMsg('That image could not be read. Try a PNG or JPG.','err');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function renderCover(){
+  const host = $('coverPrev');
+  if(!state.cover){ host.innerHTML=''; return; }
+  host.innerHTML = '<div class="cover-prev"><img src="'+state.cover.dataUrl+'" alt=""><div>'+
+    '<div style="font-family:var(--mono);font-size:12px;color:var(--steel)">'+esc(state.cover.name)+'</div>'+
+    '<div style="font-size:12px;color:var(--muted)">'+state.cover.w+' \u00d7 '+state.cover.h+' px</div>'+
+    '<button class="btn danger" type="button" id="dropCoverBtn" style="margin-top:8px">Remove</button></div></div>';
+  $('dropCoverBtn').onclick = ()=>{ state.cover=null; renderCover(); };
+}
+const esc = (s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ============================================================
+   Board
+   ============================================================ */
+function setMsg(text, kind){
+  const m = $('msg'); m.textContent = text || ''; m.className = 'status-msg ' + (kind||'');
+}
+function renderBoard(){
+  const s = state.stats;
+  const hasAlerts = !!s, hasCases = state.cases.length>0;
+  $('boardEmpty').style.display = (hasAlerts||hasCases) ? 'none' : 'block';
+  $('boardAlerts').style.display = hasAlerts ? 'block' : 'none';
+  $('boardCases').style.display  = hasCases ? 'block' : 'none';
+
+  if(hasAlerts){
+    const threshold = Number($('threshold').value||8);
+    $('sTotal').textContent = nf(s.totalEvents);
+    $('sRules').textContent = nf(s.ruleCount);
+    $('sPriority').textContent = nf(state.alerts.filter(a=>a.level>=threshold).length);
+    $('sBuckets').innerHTML = s.buckets.map(b=>
+      '<div class="bk"><em style="color:#'+b.hex+'">'+b.key+'</em><b>'+nf(b.events)+'</b></div>').join('');
+    const max = Math.max(1, ...s.levels.map(l=>l.events));
+    $('sLadder').innerHTML = s.levels.filter(l=>l.events>0).map(l=>{
+      const hex = bucketHex(bucketOf(l.level));
+      const w = Math.max(2, l.events/max*100);
+      return '<div class="lvl"><i>'+l.level+'</i><div class="bar"><i style="width:'+w+'%;background:#'+hex+'"></i></div><u>'+nf(l.events)+'</u></div>';
+    }).join('');
+  }
+
+  if(hasCases){
+    const cs = computeCaseStats(casesInPeriod());
+    $('cRaised').textContent = nf(cs.total);
+    $('cResolved').textContent = nf(cs.resolved);
+    $('cOpen').textContent = nf(cs.open);
+    $('cMttr').textContent = fmtHours(cs.medianHours);
+    $('cSev').innerHTML = cs.sev.map(x=>
+      '<div class="bk"><em style="color:#'+x.hex+'">'+x.label+'</em><b>'+nf(x.count)+'</b></div>').join('');
+  }
+  renderDeckList();
+  renderFileName();
+}
+
+function deckManifest(){
+  const hasAlerts = !!state.stats, hasCases = state.cases.length>0;
+  const notes = readNotes();
+  return [
+    {on:true, name:'Cover', note: state.cover ? 'Your cover image' : 'Typographic cover'},
+    {on:true, name:'Executive summary', note:'Headline numbers and narrative'},
+    {on:$('incSeverity').checked && hasAlerts, name:'Alert severity overview', note:'Low / Medium / High / Critical'},
+    {on:$('incPriority').checked && hasAlerts, name:'Priority alerts', note:'Level '+($('threshold').value||8)+' and above'},
+    {on:$('incTop').checked && hasAlerts, name:'Top alerts by volume', note:'Top '+($('topN').value||15)},
+    {on:$('incNotes').checked && notes.length>0, name:'Worth a second look', note:notes.length+' row'+(notes.length===1?'':'s')},
+    {on:$('incCaseOverview').checked && hasCases, name:'Case volume and severity', note:'Raised, resolved, open'},
+    {on:$('incCaseResolution').checked && hasCases, name:'How cases were resolved', note:'Root cause and verdict'},
+    {on:$('incCaseDetail').checked && hasCases, name:'Case register', note:'One row per case'},
+    {on:$('incRecs').checked, name:'Recommendations', note:'From section 07'},
+    {on:$('incClosing').checked, name:'Closing', note:'Sign-off block'}
+  ];
+}
+function renderDeckList(){
+  let n = 0;
+  $('deckList').innerHTML = deckManifest().map(d=>{
+    if(d.on) n++;
+    return '<div class="deck-row'+(d.on?'':' off')+'"><i>'+(d.on ? String(n).padStart(2,'0') : '\u2014')+'</i>'+
+      '<div>'+esc(d.name)+'<small>'+esc(d.note)+'</small></div></div>';
+  }).join('');
+}
+
+/* ============================================================
+   Repeatable rows — "worth a second look"
+   ============================================================ */
+function addNoteRow(data){
+  data = data || {};
+  const host = $('rowsNote');
+  const item = document.createElement('div');
+  item.className = 'row-item';
+  item.innerHTML =
+    '<div class="row-top"><span class="row-n"></span><span class="spacer"></span>'+
+    '<button class="btn danger" type="button">Remove</button></div>'+
+    '<div class="grid g4">'+
+      '<label class="f"><span class="lbl">Rule ID</span><input type="text" class="n-rule mono" value="'+esc(data.rule||'')+'"></label>'+
+      '<label class="f"><span class="lbl">Level</span><input type="text" class="n-level mono" value="'+esc(data.level||'')+'"></label>'+
+      '<label class="f"><span class="lbl">Events</span><input type="text" class="n-count mono" value="'+esc(data.count||'')+'"></label>'+
+      '<label class="f"><span class="lbl">Source</span><input type="text" class="n-source" value="'+esc(data.source||'')+'"></label>'+
+    '</div>'+
+    '<label class="f" style="margin-top:12px"><span class="lbl">Alert</span><input type="text" class="n-desc" value="'+esc(data.desc||'')+'"></label>'+
+    '<label class="f" style="margin-top:12px"><span class="lbl">Why it matters</span><textarea class="n-why" placeholder="One or two sentences for the executive reader.">'+esc(data.why||'')+'</textarea></label>';
+  item.querySelector('.btn.danger').onclick = ()=>{ item.remove(); renumberNotes(); renderDeckList(); };
+  item.querySelectorAll('input,textarea').forEach(el=>el.addEventListener('input', renderDeckList));
+  host.appendChild(item);
+  renumberNotes();
+  renderDeckList();
+}
+function renumberNotes(){
+  const host = $('rowsNote');
+  const items = [...host.children].filter(el=>el.classList.contains('row-item'));
+  [...host.children].forEach(el=>{ if(!el.classList.contains('row-item')) el.remove(); });
+  items.forEach((el,i)=>{ el.querySelector('.row-n').textContent = 'ROW ' + String(i+1).padStart(2,'0'); });
+  if(!items.length){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'No rows yet. Add one, or let the tool suggest medium and low severity rules from the export.';
+    host.appendChild(e);
+  }
+  $('cntNote').textContent = items.length + ' row' + (items.length===1?'':'s');
+}
+function readNotes(){
+  return [...$('rowsNote').children].filter(el=>el.classList.contains('row-item')).map(el=>({
+    rule:   el.querySelector('.n-rule').value.trim(),
+    level:  el.querySelector('.n-level').value.trim(),
+    count:  el.querySelector('.n-count').value.trim(),
+    source: el.querySelector('.n-source').value.trim(),
+    desc:   el.querySelector('.n-desc').value.trim(),
+    why:    el.querySelector('.n-why').value.trim()
+  })).filter(r=>r.desc || r.rule);
+}
+function seedNotes(){
+  if(!state.stats){ setMsg('Load the alert export first.','err'); return; }
+  const threshold = Number($('threshold').value||8);
+  const picks = state.alerts
+    .filter(a=>a.level>=4 && a.level<threshold)
+    .sort((a,b)=> b.level-a.level || a.count-b.count)
+    .slice(0,5);
+  if(!picks.length){ setMsg('No medium or low severity rules sit below level '+threshold+'.','err'); return; }
+  picks.forEach(a=>addNoteRow({
+    rule:a.id, level:String(a.level), count:nf(a.count), source:guessSource(a.desc),
+    desc:trim(a.desc,110), why:''
+  }));
+  setMsg('Added '+picks.length+' suggestions. Write the "why it matters" line for each — that is the part an executive reads.','ok');
+}
+
+/* ============================================================
+   Period and narrative helpers
+   ============================================================ */
+const toISO = (d)=> d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function periodFromCases(){
+  const dates = state.cases.map(c=>c.reported).filter(Boolean).sort((a,b)=>a-b);
+  if(!dates.length){ setMsg('The case export has no readable dates.','err'); return; }
+  $('periodStart').value = toISO(dates[0]);
+  $('periodEnd').value   = toISO(dates[dates.length-1]);
+  renderBoard();
+}
+function periodLast14(){
+  const end = $('periodEnd').value ? new Date($('periodEnd').value+'T00:00:00') : new Date();
+  const start = new Date(end.getTime() - 13*86400000);
+  $('periodStart').value = toISO(start);
+  $('periodEnd').value = toISO(end);
+  renderBoard();
+}
+function fillAnalysts(){
+  const owners = tally(state.cases.filter(c=>c.owner), c=>c.owner).map(o=>o.label);
+  if(!owners.length){ setMsg('The case export has no owner names.','err'); return; }
+  $('analysts').value = owners.join(', ');
+}
+function fmtDate(d){ return d ? d.getDate()+' '+MON_SHORT[d.getMonth()]+' '+d.getFullYear() : ''; }
+function fmtDateLong(d){ return d ? d.getDate()+' '+MONTHS[d.getMonth()]+' '+d.getFullYear() : ''; }
+function periodLabel(){
+  const {start,end} = periodRange();
+  if(start && end) return fmtDate(start)+' \u2013 '+fmtDate(end);
+  if(start) return 'From '+fmtDate(start);
+  if(end) return 'Up to '+fmtDate(end);
+  return 'Full export';
+}
+
+function draftNarrative(){
+  const s = state.stats;
+  if(!s && !state.cases.length){ setMsg('Load an export first and the narrative writes itself.','err'); return; }
+  const cs = computeCaseStats(casesInPeriod());
+  const parts = [];
+  if(s){
+    const hi = s.buckets.filter(b=>b.key==='High'||b.key==='Critical').reduce((n,b)=>n+b.events,0);
+    const hiRules = s.buckets.filter(b=>b.key==='High'||b.key==='Critical').reduce((n,b)=>n+b.rules,0);
+    parts.push('The SIEM processed '+nf(s.totalEvents)+' events across '+nf(s.ruleCount)+
+      ' distinct rules during '+periodLabel()+'. Of these, '+nf(hi)+' events ('+
+      (s.totalEvents?(hi/s.totalEvents*100).toFixed(1):'0')+'%) came from '+nf(hiRules)+
+      ' high or critical severity rules; the remainder is routine infrastructure and authentication logging.');
+  }
+  if(cs.total){
+    parts.push(nf(cs.total)+' case'+(cs.total===1?' was':'s were')+' raised and '+nf(cs.resolved)+
+      ' closed, a '+cs.rate.toFixed(0)+'% resolution rate, with a median time to close of '+fmtHours(cs.medianHours)+'.');
+    const top = cs.roots[0];
+    if(top) parts.push('The largest root-cause group was '+top.label.toLowerCase()+' at '+
+      nf(top.count)+' case'+(top.count===1?'':'s')+'. No unresolved critical exposure remains open at the close of the period.');
+  }
+  $('narrative').value = parts.join(' ');
+  setMsg('Narrative drafted. Edit it — the numbers are right but the judgement should be yours.','ok');
+}
+
+/* ============================================================
+   File name
+   ============================================================ */
+function safeName(s){ return String(s).replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim(); }
+function outputName(){
+  const custom = $('fileName').value.trim();
+  if(custom) return safeName(custom.replace(/\.pptx$/i,'')) + '.pptx';
+  const {start,end} = periodRange();
+  const cust = safeName($('customer').value.trim() || 'Heritage Minerals').replace(/\s+/g,'-');
+  const tag = (start && end) ? toISO(start)+'_'+toISO(end) : toISO(new Date());
+  return cust + '-SOC-Bi-Weekly-Exec-Summary-' + tag + '.pptx';
+}
+function renderFileName(){ $('filePreview').textContent = outputName(); }
+
+/* ============================================================
+   Model
+   ============================================================ */
+function collectModel(){
+  const s = state.stats;
+  const threshold = Number($('threshold').value||8);
+  const topN = Number($('topN').value||15);
+  const descW = Number($('descWidth').value||76);
+  const cs = computeCaseStats(casesInPeriod());
+  const {start,end} = periodRange();
+
+  const floor = $('registerFloor').value;
+  const floorRank = {critical:3, high:2, medium:1, low:0, info:0, unset:0};
+  const minRank = floor==='high' ? 2 : floor==='medium' ? 1 : 0;
+  const register = cs.list
+    .filter(c=>(floorRank[sevMeta(c.sev).key] || 0) >= minRank)
+    .sort((a,b)=>{
+      const r = (floorRank[sevMeta(b.sev).key]||0) - (floorRank[sevMeta(a.sev).key]||0);
+      if(r) return r;
+      return (b.reported ? b.reported.getTime() : 0) - (a.reported ? a.reported.getTime() : 0);
+    })
+    .slice(0, Number($('registerCap').value||14));
+
+  return {
+    header:{
+      customer: $('customer').value.trim() || 'Heritage Minerals',
+      deckTitle: $('deckTitle').value.trim() || 'SOC Bi-Weekly Executive Summary',
+      periodLabel: periodLabel(),
+      periodLong: (start && end) ? fmtDateLong(start)+' \u2013 '+fmtDateLong(end) : periodLabel(),
+      status: $('reportStatus').value,
+      posture: $('posture').value,
+      preparedBy: $('preparedBy').value.trim() || 'SOC L1 Team',
+      reviewedBy: $('reviewedBy').value.trim() || '\u2014',
+      analysts: $('analysts').value.trim(),
+      closingLine: $('closingLine').value.trim() || 'Proactive Monitoring. Stronger Protection.',
+      generated: fmtDateLong(new Date())
+    },
+    narrative: $('narrative').value.trim(),
+    alerts: s ? {
+      totalEvents: s.totalEvents,
+      ruleCount: s.ruleCount,
+      buckets: s.buckets,
+      levels: s.levels.filter(l=>l.events>0),
+      threshold,
+      priority: state.alerts.filter(a=>a.level>=threshold)
+        .sort((a,b)=>b.level-a.level || b.count-a.count)
+        .map(a=>({...a, descShort:trim(a.desc,descW), source:guessSource(a.desc), bucket:bucketOf(a.level)})),
+      top: s.sorted.slice(0, topN).map(a=>({...a, descShort:trim(a.desc,descW), source:guessSource(a.desc),
+        bucket:bucketOf(a.level), pct: s.totalEvents ? a.count/s.totalEvents*100 : 0}))
+    } : null,
+    notes: readNotes(),
+    cases: state.cases.length ? cs : null,
+    register,
+    resolutionNotes: $('resolutionNotes').value.trim(),
+    recs:   $('recs').value.split('\n').map(x=>x.trim()).filter(Boolean),
+    issues: $('issues').value.split('\n').map(x=>x.trim()).filter(Boolean),
+    include:{
+      severity: $('incSeverity').checked,
+      priority: $('incPriority').checked,
+      top: $('incTop').checked,
+      notes: $('incNotes').checked,
+      caseOverview: $('incCaseOverview').checked,
+      caseResolution: $('incCaseResolution').checked,
+      caseDetail: $('incCaseDetail').checked,
+      recs: $('incRecs').checked,
+      closing: $('incClosing').checked
+    },
+    cover: state.cover ? state.cover.dataUrl : null
+  };
+}
+
+/* ============================================================
+   Deck builder — pure. Takes the PptxGenJS constructor and a model,
+   returns the presentation. Kept free of DOM on purpose.
+   ============================================================ */
+/*<deck-builder>*/
+function buildDeck(PptxCtor, model){
+  const W = 13.333, H = 7.5;
+  const MX = 0.55, CW = W - MX*2;
+
+  const INK='060D18', PANEL='0D1826', PANEL2='111F31', LINE='1E3149', TRACK='16283D';
+  const COPPER='C98A3E', STEEL='6FA3D6', PAPER='E6EDF5', MUTED='8B9EB5';
+  const SANS='Segoe UI', MONO='Consolas';
+
+  const pptx = new PptxCtor();
+  const RECT = (pptx.ShapeType && pptx.ShapeType.rect) ? pptx.ShapeType.rect : 'rect';
+
+  pptx.defineLayout({name:'HM_WIDE', width:W, height:H});
+  pptx.layout = 'HM_WIDE';
+  pptx.author  = model.header.preparedBy;
+  pptx.company = model.header.customer;
+  pptx.title   = model.header.deckTitle;
+  pptx.subject = model.header.customer + ' \u2014 ' + model.header.periodLabel;
+
+  const footer = model.header.customer + '  \u00b7  ' + model.header.deckTitle + '  \u00b7  ' + model.header.periodLabel;
+
+  pptx.defineSlideMaster({
+    title:'HM_BODY',
+    background:{color:INK},
+    objects:[
+      {rect:{x:0, y:0, w:W, h:0.055, fill:{color:COPPER}}},
+      {rect:{x:0, y:H-0.5, w:W, h:0.012, fill:{color:LINE}}},
+      {text:{text:footer, options:{x:MX, y:H-0.44, w:CW-1.75, h:0.3, fontSize:8.5, fontFace:SANS,
+        color:MUTED, charSpacing:0.6, valign:'middle'}}},
+      {text:{text:'CONFIDENTIAL', options:{x:W-MX-1.65, y:H-0.44, w:1.65, h:0.3, fontSize:8.5, fontFace:SANS,
+        color:'55647A', align:'right', charSpacing:0.9, valign:'middle'}}}
+    ]
+  });
+  pptx.defineSlideMaster({title:'HM_PLAIN', background:{color:INK}});
+
+  /* ---------- primitives ---------- */
+  function head(slide, eyebrow, title, sub){
+    slide.addText(String(eyebrow).toUpperCase(), {x:MX, y:0.33, w:CW, h:0.24,
+      fontSize:9.5, fontFace:SANS, color:COPPER, bold:true, charSpacing:2.4, valign:'middle'});
+    slide.addText(title, {x:MX, y:0.57, w:CW*0.72, h:0.46,
+      fontSize:23, fontFace:SANS, color:PAPER, bold:true, charSpacing:0.2, valign:'middle'});
+    if(sub) slide.addText(sub, {x:MX+CW*0.72, y:0.57, w:CW*0.28, h:0.46,
+      fontSize:10, fontFace:SANS, color:MUTED, align:'right', valign:'middle'});
+    slide.addShape(RECT, {x:MX, y:1.14, w:CW, h:0.014, fill:{color:LINE}});
+    slide.addShape(RECT, {x:MX, y:1.14, w:1.35, h:0.014, fill:{color:COPPER}});
+  }
+  function panel(slide, x, y, w, h, title){
+    slide.addShape(RECT, {x, y, w, h, fill:{color:PANEL}, line:{color:LINE, width:0.75}});
+    if(title) slide.addText(String(title).toUpperCase(), {x:x+0.22, y:y+0.14, w:w-0.44, h:0.26,
+      fontSize:9, fontFace:SANS, color:COPPER, bold:true, charSpacing:1.8, valign:'middle'});
+  }
+  function tile(slide, x, y, w, h, label, value, sub, hex){
+    slide.addShape(RECT, {x, y, w, h, fill:{color:PANEL}, line:{color:LINE, width:0.75}});
+    slide.addShape(RECT, {x, y, w:0.045, h, fill:{color:hex||COPPER}});
+    slide.addText(String(label).toUpperCase(), {x:x+0.26, y:y+0.15, w:w-0.44, h:0.24,
+      fontSize:8.5, fontFace:SANS, color:MUTED, charSpacing:1.6, valign:'middle'});
+    slide.addText(String(value), {x:x+0.24, y:y+0.36, w:w-0.44, h:0.5,
+      fontSize:26, fontFace:MONO, color:PAPER, bold:true, valign:'middle'});
+    if(sub) slide.addText(sub, {x:x+0.26, y:y+0.84, w:w-0.44, h:0.26,
+      fontSize:9, fontFace:SANS, color:hex||STEEL, valign:'middle'});
+  }
+  function hbar(slide, x, y, w, label, valueText, pct, hex, labelW, valueW){
+    labelW = labelW || 2.0; valueW = valueW || 1.15;
+    const trackX = x + labelW, trackW = w - labelW - valueW - 0.2;
+    slide.addText(label, {x, y, w:labelW-0.1, h:0.26, fontSize:10, fontFace:SANS, color:PAPER, valign:'middle'});
+    slide.addShape(RECT, {x:trackX, y:y+0.085, w:trackW, h:0.11, fill:{color:TRACK}});
+    const fillW = Math.max(0.02, trackW * Math.max(0, Math.min(100, pct)) / 100);
+    slide.addShape(RECT, {x:trackX, y:y+0.085, w:fillW, h:0.11, fill:{color:hex}});
+    slide.addText(valueText, {x:x+w-valueW, y, w:valueW, h:0.26,
+      fontSize:10, fontFace:MONO, color:PAPER, align:'right', valign:'middle'});
+  }
+  function segbar(slide, x, y, w, h, parts){
+    const total = parts.reduce((n,p)=>n+p.count,0) || 1;
+    let cx = x;
+    parts.forEach((p,i)=>{
+      const pw = (i === parts.length-1) ? Math.max(0.02, x+w-cx) : Math.max(0.02, w*p.count/total);
+      slide.addShape(RECT, {x:cx, y, w:pw, h, fill:{color:p.hex}});
+      cx += pw;
+    });
+  }
+  // A vertical list, not a row of columns: six-figure event counts have nowhere
+  // to go in a quarter-panel column and wrap into each other.
+  function legend(slide, x, y, w, parts, total, rowH){
+    rowH = rowH || 0.32;
+    parts.forEach((p,i)=>{
+      const ly = y + i*rowH;
+      slide.addShape(RECT, {x, y:ly + rowH/2 - 0.065, w:0.13, h:0.13, fill:{color:p.hex}});
+      slide.addText(p.label, {x:x+0.26, y:ly, w:Math.max(0.5, w-2.3), h:rowH,
+        fontSize:10, fontFace:SANS, color:PAPER, valign:'middle'});
+      slide.addText(num(p.count) + (total ? '   ' + pctText(p.count/total*100, 1) : ''),
+        {x:x+w-2.0, y:ly, w:2.0, h:rowH, fontSize:10, fontFace:MONO, color:MUTED,
+         align:'right', valign:'middle'});
+    });
+  }
+  // Sub-threshold shares read as a flat "0.0%", which looks like nothing was
+  // counted. Show the floor instead so a small number still reads as a number.
+  function pctText(p, floor, dec){
+    floor = (floor == null) ? 1 : floor;
+    if(p >= floor) return p.toFixed(dec == null ? (p >= 10 ? 0 : 1) : dec) + '%';
+    return '<' + floor + '%';
+  }
+  function bullets(slide, x, y, w, h, items){
+    if(!items.length){
+      slide.addText('Nothing recorded for this period.', {x:x+0.22, y:y+0.5, w:w-0.44, h:0.3,
+        fontSize:10, fontFace:SANS, color:MUTED, italic:true});
+      return;
+    }
+    // bullet and breakLine belong on each run — set on the shared options they
+    // only reach the first paragraph, leaving the rest unmarked.
+    slide.addText(items.map((t,i)=>({text:t, options:{
+      bullet:{code:'25AA', indent:14}, breakLine: i < items.length-1
+    }})), {
+      x:x+0.24, y:y+0.5, w:w-0.48, h:h-0.7, fontSize:11.5, fontFace:SANS, color:PAPER,
+      lineSpacingMultiple:1.2, paraSpaceAfter:10, valign:'top'
+    });
+  }
+  // Tables with few rows leave a dead band above the footer. Grow the rows to
+  // fill the space instead, within limits that keep the type comfortable.
+  function fitRowH(rowCount, y, min, max){
+    const avail = H - 0.95 - y;
+    return Math.max(min || 0.28, Math.min(max || 0.42, avail / Math.max(rowCount, 1)));
+  }
+  function tableOpts(x, y, w, colW, extra){
+    return Object.assign({
+      x, y, w, colW,
+      border:{type:'solid', color:LINE, pt:0.5},
+      fill:{color:PANEL},
+      color:PAPER, fontFace:SANS, fontSize:9,
+      valign:'middle', margin:[3,5,3,5], rowH:0.3,
+      autoPage:false
+    }, extra||{});
+  }
+  function th(text, align){
+    return {text, options:{fill:{color:'132437'}, color:COPPER, bold:true, fontSize:8.5,
+      charSpacing:1.1, align:align||'left', valign:'middle'}};
+  }
+  // pptxgenjs rewrites option objects in place, so every cell gets its own
+  // options object and its own nested fill rather than a shared reference.
+  function td(text, o){
+    o = o || {};
+    const opt = Object.assign({valign:'middle'}, o);
+    if(o.fill) opt.fill = {color: (typeof o.fill === 'string') ? o.fill : o.fill.color};
+    return {text:String(text), options:opt};
+  }
+  function zebra(i){ return i%2 ? PANEL2 : PANEL; }
+  function sevPill(label){
+    const hex = bucketHexLocal(label);
+    return {text:label, options:{color:hex, bold:true, align:'center', fontSize:8.5}};
+  }
+  function bucketHexLocal(key){
+    const m = {Low:'3F8F6B', Medium:'C9A13E', High:'D9722F', Critical:'C7433B',
+               low:'3F8F6B', medium:'C9A13E', high:'D9722F', critical:'C7433B', info:'6FA3D6'};
+    return m[key] || MUTED;
+  }
+  const num = (n)=>Number(n||0).toLocaleString('en-US');
+  function hrs(h){
+    if(h == null) return '\u2014';
+    if(h < 1) return Math.round(h*60)+'m';
+    if(h < 48) return (h<10 ? h.toFixed(1) : Math.round(h))+'h';
+    return (h/24).toFixed(1)+'d';
+  }
+  const dstr = (d)=>{
+    if(!d) return '\u2014';
+    const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return d.getDate()+' '+M[d.getMonth()]+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  };
+
+  /* ---------- 1. cover ---------- */
+  (function cover(){
+    const s = pptx.addSlide({masterName:'HM_PLAIN'});
+    if(model.cover){
+      s.addImage({data:model.cover, x:0, y:0, w:W, h:H, sizing:{type:'cover', w:W, h:H}});
+      s.addShape(RECT, {x:0, y:H-1.5, w:W, h:1.5, fill:{color:INK, transparency:18}});
+      s.addShape(RECT, {x:0, y:H-1.5, w:W, h:0.03, fill:{color:COPPER}});
+      s.addText(model.header.deckTitle, {x:MX, y:H-1.28, w:CW*0.66, h:0.44,
+        fontSize:20, fontFace:SANS, color:PAPER, bold:true, valign:'middle'});
+      s.addText(model.header.periodLong, {x:MX, y:H-0.82, w:CW*0.66, h:0.34,
+        fontSize:12, fontFace:MONO, color:COPPER, valign:'middle'});
+      s.addText([
+        {text:model.header.customer, options:{fontSize:12, color:PAPER, bold:true, breakLine:true}},
+        {text:model.header.status+' \u00b7 issued '+model.header.generated, options:{fontSize:9.5, color:MUTED}}
+      ], {x:MX+CW*0.66, y:H-1.18, w:CW*0.34, h:0.8, fontFace:SANS, align:'right', valign:'middle'});
+    }else{
+      s.addShape(RECT, {x:0, y:0, w:0.11, h:H, fill:{color:COPPER}});
+      s.addText(model.header.customer.toUpperCase(), {x:1.1, y:1.9, w:CW, h:0.4,
+        fontSize:13, fontFace:SANS, color:COPPER, bold:true, charSpacing:5, valign:'middle'});
+      s.addText(model.header.deckTitle, {x:1.06, y:2.4, w:CW-1, h:1.5,
+        fontSize:44, fontFace:SANS, color:PAPER, bold:true, valign:'top', lineSpacingMultiple:1.05});
+      s.addShape(RECT, {x:1.1, y:4.1, w:2.2, h:0.02, fill:{color:COPPER}});
+      s.addText(model.header.periodLong, {x:1.06, y:4.3, w:CW-1, h:0.4,
+        fontSize:15, fontFace:MONO, color:STEEL, valign:'middle'});
+      s.addText(model.header.closingLine, {x:1.06, y:4.85, w:CW-1, h:0.4,
+        fontSize:12, fontFace:SANS, color:MUTED, italic:true, valign:'middle'});
+      s.addText(model.header.status+'  \u00b7  Prepared by '+model.header.preparedBy+'  \u00b7  '+model.header.generated,
+        {x:1.06, y:H-1.0, w:CW-1, h:0.3, fontSize:9.5, fontFace:SANS, color:MUTED, valign:'middle'});
+    }
+  })();
+
+  /* ---------- 2. executive summary ---------- */
+  (function exec(){
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Executive summary', 'The period at a glance', model.header.periodLabel);
+
+    const a = model.alerts, c = model.cases;
+    const hiEvents = a ? a.buckets.filter(b=>b.key==='High'||b.key==='Critical').reduce((n,b)=>n+b.events,0) : 0;
+    const hiRules  = a ? a.buckets.filter(b=>b.key==='High'||b.key==='Critical').reduce((n,b)=>n+b.rules,0) : 0;
+
+    const tiles = [
+      ['Events processed', a ? num(a.totalEvents) : '\u2014', a ? num(a.ruleCount)+' distinct rules' : 'No alert export', STEEL],
+      ['High & critical events', a ? num(hiEvents) : '\u2014',
+        a ? (a.totalEvents ? (hiEvents/a.totalEvents*100).toFixed(1)+'% of volume, '+num(hiRules)+' rules' : '\u2014') : 'No alert export', 'D9722F'],
+      ['Security posture', model.header.posture, 'Analyst assessment', COPPER],
+      ['Cases raised', c ? num(c.total) : '\u2014',
+        c ? (c.sev.length ? c.sev.slice(0,2).map(x=>x.count+' '+x.label.toLowerCase()).join('  \u00b7  ') : '\u2014') : 'No case export', 'C9A13E'],
+      ['Cases resolved', c ? num(c.resolved) : '\u2014', c ? c.rate.toFixed(0)+'% closed, '+num(c.open)+' still open' : 'No case export', '3F8F6B'],
+      ['Median time to close', c ? hrs(c.medianHours) : '\u2014',
+        c ? (c.within24Pct ? Math.round(c.within24Pct)+'% closed within 24h' : 'Across resolved cases') : 'No case export', STEEL]
+    ];
+    const tw = (CW - 0.28*2)/3, th_ = 1.22;
+    tiles.forEach((t,i)=>{
+      const col = i%3, row = Math.floor(i/3);
+      tile(s, MX + col*(tw+0.28), 1.5 + row*(th_+0.24), tw, th_, t[0], t[1], t[2], t[3]);
+    });
+
+    const ny = 1.5 + 2*(th_+0.24);
+    panel(s, MX, ny, CW, H-0.72-ny, 'Analyst narrative');
+    const text = model.narrative || 'No narrative was written for this period.';
+    s.addText(text, {x:MX+0.24, y:ny+0.5, w:CW-0.48, h:H-0.72-ny-0.7,
+      fontSize:12.5, fontFace:SANS, color:PAPER, lineSpacingMultiple:1.3, valign:'top'});
+  })();
+
+  /* ---------- 3. alert severity ---------- */
+  if(model.alerts && model.include.severity) (function severity(){
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Alert volume', 'Severity of everything the SIEM saw', num(model.alerts.totalEvents)+' events');
+
+    const a = model.alerts;
+    const bw = (CW - 0.24*3)/4;
+    a.buckets.forEach((b,i)=>{
+      const x = MX + i*(bw+0.24);
+      tile(s, x, 1.46, bw, 1.34, b.key+'  \u00b7  level '+b.range, num(b.events),
+        pctText(b.pct, 0.1)+' of volume  \u00b7  '+num(b.rules)+' rules', b.hex);
+    });
+
+    const py = 3.0, ph = H - 0.72 - py;
+    panel(s, MX, py, CW*0.60, ph, 'Events by rule level');
+    const maxEv = Math.max.apply(null, a.levels.map(l=>l.events).concat([1]));
+    const rows = a.levels.slice(-11);
+    const rowH = Math.min(0.32, (ph-0.75)/Math.max(rows.length,1));
+    rows.forEach((l,i)=>{
+      hbar(s, MX+0.24, py+0.56+i*rowH, CW*0.60-0.48,
+        'Level '+l.level+'  \u00b7  '+l.rules+' rule'+(l.rules===1?'':'s'),
+        num(l.events), l.events/maxEv*100, bucketHexLocal(bucketKeyForLevel(l.level)), 2.3, 1.25);
+    });
+
+    const rx = MX + CW*0.60 + 0.24, rw = CW - CW*0.60 - 0.24;
+    panel(s, rx, py, rw, ph, 'Where the volume sits');
+    const mix = a.buckets.filter(b=>b.events>0).map(b=>({label:b.key, count:b.events, hex:b.hex}));
+    segbar(s, rx+0.24, py+0.58, rw-0.48, 0.24, mix);
+    legend(s, rx+0.24, py+0.96, rw-0.48, mix.slice(0,4), a.totalEvents, 0.32);
+    const legendEnd = py + 0.96 + Math.min(mix.length,4)*0.32;
+    s.addShape(RECT, {x:rx+0.24, y:legendEnd+0.14, w:rw-0.48, h:0.012, fill:{color:LINE}});
+    const hiRules = a.buckets.filter(b=>b.key==='High'||b.key==='Critical').reduce((n,b)=>n+b.rules,0);
+    s.addText([
+      {text:'Read this as noise versus signal. ', options:{bold:true, color:PAPER, breakLine:false}},
+      {text:'Low severity volume is expected background from infrastructure and authentication logging. The '+
+            num(hiRules)+' high and critical rules are the ones that drive triage, and they are listed on the next slide.',
+       options:{color:MUTED}}
+    ], {x:rx+0.24, y:legendEnd+0.3, w:rw-0.48, h:Math.max(0.4, py+ph-legendEnd-0.5), fontSize:10.5, fontFace:SANS,
+        lineSpacingMultiple:1.25, valign:'top'});
+  })();
+
+  function bucketKeyForLevel(lvl){
+    if(lvl <= 3) return 'Low';
+    if(lvl <= 7) return 'Medium';
+    if(lvl <= 11) return 'High';
+    return 'Critical';
+  }
+
+  /* ---------- 4. priority alerts ---------- */
+  if(model.alerts && model.include.priority) (function priority(){
+    const list = model.alerts.priority;
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Priority alerts', 'Rules at level '+model.alerts.threshold+' and above',
+      list.length+' rule'+(list.length===1?'':'s'));
+
+    if(!list.length){
+      panel(s, MX, 1.5, CW, 1.4, null);
+      s.addText('No rule reached level '+model.alerts.threshold+' during this period.',
+        {x:MX+0.3, y:1.5, w:CW-0.6, h:1.4, fontSize:13, fontFace:SANS, color:MUTED, valign:'middle'});
+      return;
+    }
+    const colW = [1.0, 1.75, 5.65, 0.65, 1.05, 1.28, 0.85];
+    const rows = [[th('Rule ID'), th('Source'), th('Alert'), th('Lvl','center'),
+                   th('Severity','center'), th('Events','right'), th('Share','right')]];
+    list.slice(0,15).forEach((a,i)=>{
+      const fill = {color:zebra(i)};
+      rows.push([
+        td(a.id || '\u2014', {fill, fontFace:MONO, fontSize:8.5, color:STEEL}),
+        td(a.source, {fill, fontSize:8.5}),
+        td(a.descShort, {fill}),
+        td(String(a.level), {fill, fontFace:MONO, align:'center', color:bucketHexLocal(a.bucket), bold:true}),
+        td(a.bucket, {fill, align:'center', color:bucketHexLocal(a.bucket), bold:true, fontSize:8.5}),
+        td(num(a.count), {fill, fontFace:MONO, align:'right'}),
+        td(model.alerts.totalEvents ? pctText(a.count/model.alerts.totalEvents*100, 0.01, 2) : '\u2014',
+           {fill, fontFace:MONO, align:'right', color:MUTED, fontSize:8.5})
+      ]);
+    });
+    s.addTable(rows, tableOpts(MX, 1.5, CW, colW, {rowH: fitRowH(rows.length, 1.5, 0.3, 0.42)}));
+    if(list.length > 15){
+      s.addText('+ '+(list.length-15)+' further rules at or above level '+model.alerts.threshold+
+        ' are held in the full alert export.',
+        {x:MX, y:H-0.86, w:CW, h:0.26, fontSize:9, fontFace:SANS, color:MUTED, italic:true, valign:'middle'});
+    }
+  })();
+
+  /* ---------- 5. top alerts ---------- */
+  if(model.alerts && model.include.top) (function top(){
+    const list = model.alerts.top;
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Alert volume', 'Top '+list.length+' rules by event count', num(model.alerts.totalEvents)+' events total');
+
+    const colW = [0.42, 1.0, 6.15, 0.62, 1.02, 1.32, 1.70];
+    const rows = [[th('#','center'), th('Rule ID'), th('Alert'), th('Lvl','center'),
+                   th('Severity','center'), th('Events','right'), th('Share of volume')]];
+    list.forEach((a,i)=>{
+      const fill = {color:zebra(i)};
+      rows.push([
+        td(String(i+1), {fill, fontFace:MONO, align:'center', color:MUTED, fontSize:8.5}),
+        td(a.id || '\u2014', {fill, fontFace:MONO, fontSize:8.5, color:STEEL}),
+        td(a.descShort, {fill}),
+        td(String(a.level), {fill, fontFace:MONO, align:'center', color:bucketHexLocal(a.bucket), bold:true}),
+        td(a.bucket, {fill, align:'center', color:bucketHexLocal(a.bucket), bold:true, fontSize:8.5}),
+        td(num(a.count), {fill, fontFace:MONO, align:'right'}),
+        td('', {fill})
+      ]);
+    });
+    // rowH applies to every row including the header, so the bar overlay below
+    // can be positioned arithmetically. Descriptions are trimmed so nothing wraps.
+    const tableY = 1.46, rowH = fitRowH(rows.length, tableY, 0.3, 0.4), headH = rowH;
+    s.addTable(rows, tableOpts(MX, tableY, CW, colW, {rowH}));
+
+    // Share-of-volume bars, drawn over the blank last column.
+    const barX = MX + colW.slice(0,6).reduce((n,v)=>n+v,0) + 0.12;
+    const barW = colW[6] - 0.72;
+    const maxPct = Math.max.apply(null, list.map(a=>a.pct).concat([0.01]));
+    list.forEach((a,i)=>{
+      const y = tableY + headH + i*rowH + rowH/2 - 0.055;
+      s.addShape(RECT, {x:barX, y, w:barW, h:0.11, fill:{color:TRACK}});
+      s.addShape(RECT, {x:barX, y, w:Math.max(0.02, barW*a.pct/maxPct), h:0.11,
+        fill:{color:bucketHexLocal(a.bucket)}});
+      s.addText(pctText(a.pct, 0.1),
+        {x:barX+barW+0.03, y:y-0.09, w:0.53, h:0.28, fontSize:8, fontFace:MONO, color:MUTED,
+         align:'right', valign:'middle'});
+    });
+  })();
+
+  /* ---------- 6. worth a second look ---------- */
+  if(model.include.notes && model.notes.length) (function notes(){
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Below the priority line', 'Alerts worth a second look',
+      model.notes.length+' item'+(model.notes.length===1?'':'s'));
+    const list = model.notes.slice(0,5);
+    const gap = 0.16;
+    const totalH = H - 0.78 - 1.46;
+    const cardH = Math.min(1.35, (totalH - gap*(list.length-1))/list.length);
+    const stackH = cardH*list.length + gap*(list.length-1);
+    const startY = 1.46 + Math.max(0, (totalH - stackH)/2);
+    list.forEach((n,i)=>{
+      const y = startY + i*(cardH+gap);
+      const hex = bucketHexLocal(n.level ? bucketKeyForLevel(Number(n.level)||0) : 'Medium');
+      slidePanelNote(s, MX, y, CW, cardH, n, hex);
+    });
+    function slidePanelNote(sl, x, y, w, h, n, hex){
+      sl.addShape(RECT, {x, y, w, h, fill:{color:PANEL}, line:{color:LINE, width:0.75}});
+      sl.addShape(RECT, {x, y, w:0.045, h, fill:{color:hex}});
+      const meta = [n.rule ? 'Rule '+n.rule : null, n.level ? 'Level '+n.level : null,
+                    n.count ? n.count+' events' : null, n.source || null].filter(Boolean).join('   \u00b7   ');
+      sl.addText(n.desc || '\u2014', {x:x+0.26, y:y+0.12, w:w-0.5, h:0.32,
+        fontSize:12, fontFace:SANS, color:PAPER, bold:true, valign:'middle'});
+      sl.addText(meta, {x:x+0.26, y:y+0.44, w:w-0.5, h:0.24,
+        fontSize:8.5, fontFace:MONO, color:hex, charSpacing:0.4, valign:'middle'});
+      if(n.why) sl.addText(n.why, {x:x+0.26, y:y+0.68, w:w-0.5, h:h-0.78,
+        fontSize:10.5, fontFace:SANS, color:MUTED, lineSpacingMultiple:1.2, valign:'top'});
+    }
+  })();
+
+  /* ---------- 7. case volume ---------- */
+  if(model.cases && model.include.caseOverview) (function caseOverview(){
+    const c = model.cases;
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Case management', 'Cases raised and closed this period', model.header.periodLabel);
+
+    const tiles = [
+      ['Raised', num(c.total), 'In the reporting window', COPPER],
+      ['Resolved', num(c.resolved), c.rate.toFixed(0)+'% of everything raised', '3F8F6B'],
+      ['Still open', num(c.open), c.open ? 'Carried into the next period' : 'Queue fully cleared', c.open ? 'D9722F' : '3F8F6B'],
+      ['Median time to close', hrs(c.medianHours), Math.round(c.within24Pct)+'% closed within 24h', STEEL]
+    ];
+    const tw = (CW - 0.24*3)/4;
+    tiles.forEach((t,i)=>tile(s, MX + i*(tw+0.24), 1.46, tw, 1.28, t[0], t[1], t[2], t[3]));
+
+    const py = 2.94, ph = H - 0.72 - py;
+    panel(s, MX, py, CW*0.52, ph, 'Severity mix');
+    segbar(s, MX+0.24, py+0.6, CW*0.52-0.48, 0.26, c.sev);
+    const maxSev = Math.max.apply(null, c.sev.map(x=>x.count).concat([1]));
+    c.sev.slice(0,5).forEach((x,i)=>{
+      hbar(s, MX+0.24, py+1.08+i*0.42, CW*0.52-0.48, x.label,
+        x.count+'   '+pctText(x.count/(c.total||1)*100, 1),
+        x.count/maxSev*100, x.hex, 1.5, 1.3);
+    });
+
+    const rx = MX + CW*0.52 + 0.24, rw = CW - CW*0.52 - 0.24;
+    panel(s, rx, py, rw, ph, 'Time to close');
+    const stats = [
+      ['Fastest', hrs(c.fastest)],
+      ['Median', hrs(c.medianHours)],
+      ['Average', hrs(c.meanHours)],
+      ['Slowest', hrs(c.slowest)],
+      ['Closed within 24 hours', c.within24+' of '+c.resolved]
+    ];
+    stats.forEach((st,i)=>{
+      const y = py + 0.6 + i*0.44;
+      s.addText(st[0], {x:rx+0.24, y, w:rw-1.7, h:0.3, fontSize:10.5, fontFace:SANS, color:MUTED, valign:'middle'});
+      s.addText(st[1], {x:rx+rw-1.5, y, w:1.26, h:0.3, fontSize:13, fontFace:MONO, color:PAPER,
+        bold:true, align:'right', valign:'middle'});
+      if(i < stats.length-1) s.addShape(RECT, {x:rx+0.24, y:y+0.4, w:rw-0.48, h:0.008, fill:{color:LINE}});
+    });
+  })();
+
+  /* ---------- 8. how cases were resolved ---------- */
+  if(model.cases && model.include.caseResolution) (function resolution(){
+    const c = model.cases;
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Case management', 'How the cases were resolved', num(c.resolved)+' of '+num(c.total)+' closed');
+
+    const lw = CW*0.50, py = 1.46, ph = H - 0.72 - py;
+    panel(s, MX, py, lw, ph, 'Root cause');
+    const maxRoot = Math.max.apply(null, c.roots.map(r=>r.count).concat([1]));
+    c.roots.slice(0,7).forEach((r,i)=>{
+      hbar(s, MX+0.24, py+0.6+i*0.42, lw-0.48, r.label,
+        r.count+'  ('+Math.round(r.count/(c.total||1)*100)+'%)',
+        r.count/maxRoot*100, i===0 ? COPPER : STEEL, 2.6, 1.3);
+    });
+
+    const rx = MX + lw + 0.24, rw = CW - lw - 0.24, rh = (ph - 0.2)/2;
+    panel(s, rx, py, rw, rh, 'Verdict at close');
+    const maxV = Math.max.apply(null, c.verdicts.map(v=>v.count).concat([1]));
+    const vHex = {'False positive':'6FA3D6','True positive':'C7433B','Benign or expected':'3F8F6B','Reviewed and closed':'C9A13E'};
+    c.verdicts.slice(0,4).forEach((v,i)=>{
+      hbar(s, rx+0.24, py+0.58+i*0.4, rw-0.48, v.label, String(v.count),
+        v.count/maxV*100, vHex[v.label] || MUTED, 2.4, 0.6);
+    });
+
+    const oy = py + rh + 0.2;
+    panel(s, rx, oy, rw, rh, 'Handled by');
+    const maxO = Math.max.apply(null, c.owners.map(o=>o.count).concat([1]));
+    c.owners.slice(0,4).forEach((o,i)=>{
+      hbar(s, rx+0.24, oy+0.58+i*0.4, rw-0.48, o.label, String(o.count),
+        o.count/maxO*100, COPPER, 2.4, 0.6);
+    });
+
+    if(model.resolutionNotes){
+      const ny = py + ph - 1.15;
+      s.addShape(RECT, {x:MX+0.24, y:ny, w:lw-0.48, h:0.014, fill:{color:LINE}});
+      s.addText(model.resolutionNotes, {x:MX+0.24, y:ny+0.12, w:lw-0.48, h:0.95,
+        fontSize:10, fontFace:SANS, color:MUTED, lineSpacingMultiple:1.2, valign:'top'});
+    }
+  })();
+
+  /* ---------- 9. case register ---------- */
+  if(model.cases && model.include.caseDetail && model.register.length) (function register(){
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Case management', 'Case register', model.register.length+' of '+num(model.cases.total)+' cases');
+
+    const colW = [1.45, 0.9, 4.55, 1.75, 1.25, 1.15, 1.18];
+    const rows = [[th('Case ID'), th('Severity','center'), th('Title'), th('Root cause'),
+                   th('Reported'), th('Closed'), th('To close','right')]];
+    const FITS = 16; // rows that clear the footer at rowH 0.29
+    model.register.slice(0, FITS).forEach((c,i)=>{
+      const fill = {color:zebra(i)};
+      const meta = sevLabel(c.sev);
+      rows.push([
+        td(c.num || '\u2014', {fill, fontFace:MONO, fontSize:8, color:STEEL}),
+        td(meta.label, {fill, align:'center', color:meta.hex, bold:true, fontSize:8.5}),
+        td(trimLocal(c.title, 78), {fill, fontSize:8.5}),
+        td(c.root, {fill, fontSize:8.5, color:MUTED}),
+        td(dstr(c.reported), {fill, fontFace:MONO, fontSize:8, color:MUTED}),
+        td(dstr(c.closed), {fill, fontFace:MONO, fontSize:8, color:MUTED}),
+        td(hrs(c.hours), {fill, fontFace:MONO, fontSize:8.5, align:'right'})
+      ]);
+    });
+    s.addTable(rows, tableOpts(MX, 1.46, CW, colW, {rowH: fitRowH(rows.length, 1.46, 0.29, 0.4)}));
+    const shown = Math.min(model.register.length, FITS), held = model.cases.total - shown;
+    if(held > 0){
+      s.addText('Showing '+shown+' of '+num(model.cases.total)+' cases. The remainder are in the case export.',
+        {x:MX, y:H-0.86, w:CW, h:0.26, fontSize:9, fontFace:SANS, color:MUTED, italic:true, valign:'middle'});
+    }
+    function sevLabel(v){
+      const k = String(v||'').toLowerCase();
+      const map = {critical:['Critical','C7433B'], high:['High','D9722F'], medium:['Medium','C9A13E'],
+                   low:['Low','3F8F6B'], info:['Info','6FA3D6']};
+      for(const key in map) if(k.indexOf(key) === 0) return {label:map[key][0], hex:map[key][1]};
+      return {label: v ? String(v) : '\u2014', hex:MUTED};
+    }
+    function trimLocal(str,n){ str = String(str||''); return str.length<=n ? str : str.slice(0,n-1).trimEnd()+'\u2026'; }
+  })();
+
+  /* ---------- 10. recommendations ---------- */
+  if(model.include.recs) (function recs(){
+    const s = pptx.addSlide({masterName:'HM_BODY'});
+    head(s, 'Looking ahead', 'Recommendations and watch items');
+    const cw = (CW - 0.28)/2, y = 1.46, h = H - 0.78 - y;
+    panel(s, MX, y, cw, h, 'Recommendations');
+    bullets(s, MX, y, cw, h, model.recs, COPPER);
+    panel(s, MX+cw+0.28, y, cw, h, 'Watch items and constraints');
+    bullets(s, MX+cw+0.28, y, cw, h, model.issues, STEEL);
+  })();
+
+  /* ---------- 11. closing ---------- */
+  if(model.include.closing) (function closing(){
+    const s = pptx.addSlide({masterName:'HM_PLAIN'});
+    s.addShape(RECT, {x:0, y:0, w:W, h:0.055, fill:{color:COPPER}});
+    s.addText(model.header.customer.toUpperCase(), {x:MX, y:2.05, w:CW, h:0.36,
+      fontSize:12, fontFace:SANS, color:COPPER, bold:true, charSpacing:5, valign:'middle'});
+    s.addText(model.header.closingLine, {x:MX-0.04, y:2.42, w:CW*0.88, h:1.2,
+      fontSize:34, fontFace:SANS, color:PAPER, bold:true, valign:'middle', lineSpacingMultiple:1.05});
+    s.addShape(RECT, {x:MX, y:3.78, w:2.2, h:0.02, fill:{color:COPPER}});
+
+    const boxY = 4.1, boxH = 1.45, bw = (CW - 0.28*2)/3;
+    const blocks = [
+      ['Prepared by', model.header.preparedBy],
+      ['Reviewed by', model.header.reviewedBy],
+      ['Reporting period', model.header.periodLong]
+    ];
+    blocks.forEach((b,i)=>{
+      const x = MX + i*(bw+0.28);
+      s.addShape(RECT, {x, y:boxY, w:bw, h:boxH, fill:{color:PANEL}, line:{color:LINE, width:0.75}});
+      s.addText(b[0].toUpperCase(), {x:x+0.24, y:boxY+0.2, w:bw-0.48, h:0.26,
+        fontSize:8.5, fontFace:SANS, color:COPPER, bold:true, charSpacing:1.6, valign:'middle'});
+      s.addText(b[1], {x:x+0.24, y:boxY+0.52, w:bw-0.48, h:0.72,
+        fontSize:13, fontFace:SANS, color:PAPER, valign:'top', lineSpacingMultiple:1.15});
+    });
+    if(model.header.analysts){
+      s.addText('Analysts on shift: '+model.header.analysts, {x:MX, y:boxY+boxH+0.26, w:CW, h:0.3,
+        fontSize:10, fontFace:SANS, color:MUTED, valign:'middle'});
+    }
+    s.addText(model.header.status+'  \u00b7  issued '+model.header.generated+'  \u00b7  CONFIDENTIAL',
+      {x:MX, y:H-0.66, w:CW, h:0.3, fontSize:9, fontFace:SANS, color:'55647A', charSpacing:0.8, valign:'middle'});
+  })();
+
+  return pptx;
+}
+/*</deck-builder>*/
+
+/* ============================================================
+   Generate
+   ============================================================ */
+async function generate(){
+  if(!state.stats && !state.cases.length){
+    setMsg('Load at least one export before generating the deck.','err');
+    return;
+  }
+  const btn = $('btnGenerate');
+  btn.disabled = true;
+  $('prog').classList.add('on');
+  setMsg('Assembling the deck\u2026','');
+  try{
+    const model = collectModel();
+    const pptx = buildDeck(PptxGenJS, model);
+    await pptx.writeFile({fileName: outputName()});
+    setMsg('Saved as ' + outputName() + '.','ok');
+  }catch(err){
+    console.error(err);
+    setMsg('The deck could not be built: ' + err.message,'err');
+  }finally{
+    btn.disabled = false;
+    $('prog').classList.remove('on');
+  }
+}
+
+/* ============================================================
+   Draft save / load — a JSON file, so it survives a browser wipe
+   ============================================================ */
+const TEXT_IDS = ['fileName','customer','periodStart','periodEnd','deckTitle','reportStatus','posture',
+  'preparedBy','reviewedBy','analysts','narrative','topN','threshold','descWidth','resolutionNotes',
+  'registerFloor','registerCap','recs','issues','closingLine'];
+const CHECK_IDS = ['incSeverity','incPriority','incTop','incNotes','incCaseOverview','incCaseResolution',
+  'incCaseDetail','incRecs','incClosing'];
+
+function saveDraft(){
+  const data = {v:1, fields:{}, checks:{}, notes:readNotes()};
+  TEXT_IDS.forEach(id=>data.fields[id] = $(id).value);
+  CHECK_IDS.forEach(id=>data.checks[id] = $(id).checked);
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = safeName(($('customer').value.trim()||'Heritage-Minerals').replace(/\s+/g,'-')) + '-biweekly-draft.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  setMsg('Draft saved. Load it back with the Load draft button.','ok');
+}
+function applyDraft(data){
+  if(!data || !data.fields) throw new Error('That file is not a saved draft.');
+  TEXT_IDS.forEach(id=>{ if(data.fields[id] !== undefined) $(id).value = data.fields[id]; });
+  CHECK_IDS.forEach(id=>{ if(data.checks && data.checks[id] !== undefined) $(id).checked = !!data.checks[id]; });
+  $('rowsNote').innerHTML = '';
+  (data.notes||[]).forEach(addNoteRow);
+  renumberNotes();
+  renderBoard();
+  setMsg('Draft loaded.','ok');
+}
+
+/* ============================================================
+   Wiring
+   ============================================================ */
+function init(){
+  wireDrop('dropAlerts','fileAlerts', loadAlerts);
+  wireDrop('dropCases','fileCases', loadCases);
+  wireDrop('dropCover','fileCover', loadCover);
+
+  $('addNote').onclick = ()=>addNoteRow();
+  $('seedNote').onclick = seedNotes;
+  $('btnPeriodFromCases').onclick = periodFromCases;
+  $('btnPeriodLast14').onclick = periodLast14;
+  $('btnAnalysts').onclick = fillAnalysts;
+  $('btnDraftNarrative').onclick = draftNarrative;
+  $('btnGenerate').onclick = generate;
+  $('btnSave').onclick = saveDraft;
+  $('btnLoad').onclick = ()=>$('fileDraft').click();
+  $('fileDraft').addEventListener('change', e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{ try{ applyDraft(JSON.parse(r.result)); }catch(err){ setMsg(err.message,'err'); } };
+    r.readAsText(f);
+    e.target.value = '';
+  });
+
+  ['periodStart','periodEnd','threshold','topN','customer','fileName'].forEach(id=>
+    $(id).addEventListener('input', renderBoard));
+  CHECK_IDS.forEach(id=>$(id).addEventListener('change', renderDeckList));
+
+  const today = new Date();
+  const start = new Date(today.getTime() - 13*86400000);
+  $('periodStart').value = toISO(start);
+  $('periodEnd').value = toISO(today);
+  $('closingLine').value = 'Proactive Monitoring. Stronger Protection.';
+
+  renumberNotes();
+  renderBoard();
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
+</script>
+</body>
+</html>
