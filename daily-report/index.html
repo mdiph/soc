@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOC L1 Daily Report Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --ink:#060D18; --panel:#0D1826; --panel-2:#111F31; --line:#1E3149;
+  --copper:#C98A3E; --copper-dim:#8A5F2B; --steel:#6FA3D6;
+  --paper:#E6EDF5; --muted:#8B9EB5;
+  --low:#3F8F6B; --med:#C9A13E; --high:#D9722F; --crit:#C7433B;
+  --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Consolas,"Liberation Mono",monospace;
+  --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1100px 620px at 78% -12%, rgba(111,163,214,.13), transparent 62%),
+    radial-gradient(760px 480px at 6% 4%, rgba(201,138,62,.10), transparent 60%),
+    var(--ink);
+  color:var(--paper); font-family:var(--sans); font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--steel)}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,24,38,.96),rgba(6,13,24,.72));
+  position:sticky; top:0; z-index:40; backdrop-filter:blur(8px);
+}
+.masthead-in{max-width:1440px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.mark{width:34px;height:26px;flex:none}
+.wordmark{display:flex;flex-direction:column;line-height:1.05}
+.wordmark b{font-weight:600;letter-spacing:.30em;font-size:14px}
+.wordmark span{font-size:10px;letter-spacing:.34em;color:var(--copper);text-transform:uppercase}
+.rule-v{width:1px;height:30px;background:var(--line)}
+.masthead h1{font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--paper)}
+.masthead p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.mast-actions{margin-left:auto;display:flex;gap:8px}
+
+/* ---------- shell ---------- */
+.shell{max-width:1440px;margin:0 auto;padding:22px;display:grid;grid-template-columns:minmax(0,1fr) 344px;gap:22px;align-items:start}
+@media (max-width:1080px){.shell{grid-template-columns:1fr}}
+
+section.card{
+  background:linear-gradient(180deg,var(--panel),rgba(13,24,38,.55));
+  border:1px solid var(--line); border-radius:10px; margin-bottom:18px; overflow:hidden;
+}
+.card-head{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.015)}
+.card-head .idx{font-family:var(--mono);font-size:11px;color:var(--copper);letter-spacing:.1em}
+.card-head h2{margin:0;font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.card-head .hint{margin-left:auto;font-size:12px;color:var(--muted)}
+.card-body{padding:18px}
+
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:720px){.g2,.g3{grid-template-columns:1fr}}
+
+label.f{display:block}
+label.f > span.lbl{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+input[type=text],input[type=number],input[type=date],input[type=time],select,textarea{
+  width:100%;background:#08121F;color:var(--paper);border:1px solid var(--line);border-radius:6px;
+  padding:9px 11px;font-family:var(--sans);font-size:14px;
+}
+input[type=number],input.mono{font-family:var(--mono)}
+textarea{resize:vertical;min-height:74px;line-height:1.5}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--steel);outline-offset:1px;border-color:var(--steel)}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 51%,calc(100% - 11px) 51%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.help{font-size:12px;color:var(--muted);margin:6px 0 0}
+
+.btn{
+  display:inline-flex;align-items:center;gap:7px;background:#132437;color:var(--paper);
+  border:1px solid var(--line);border-radius:6px;padding:8px 13px;font-size:13px;font-family:var(--sans);
+  cursor:pointer;transition:border-color .15s,background .15s;
+}
+.btn:hover{border-color:var(--steel);background:#17293e}
+.btn:focus-visible{outline:2px solid var(--steel);outline-offset:2px}
+.btn.ghost{background:transparent}
+.btn.copper{background:var(--copper);border-color:var(--copper);color:#160D02;font-weight:600}
+.btn.copper:hover{background:#dc9b4b;border-color:#dc9b4b}
+.btn.danger{color:#E58C86;border-color:#3a2028;background:transparent;padding:6px 9px}
+.btn.danger:hover{border-color:var(--crit);background:rgba(199,67,59,.12)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+.check{display:flex;align-items:flex-start;gap:9px;font-size:13.5px;color:var(--paper);cursor:pointer}
+.check input{accent-color:var(--copper);width:16px;height:16px;margin-top:2px;flex:none}
+
+/* ---------- dropzone ---------- */
+.drop{
+  border:1px dashed #2A4362;border-radius:8px;padding:20px;text-align:center;cursor:pointer;
+  background:rgba(111,163,214,.03);transition:border-color .15s,background .15s;
+}
+.drop:hover,.drop.over{border-color:var(--copper);background:rgba(201,138,62,.07)}
+.drop strong{display:block;font-size:13.5px;font-weight:600}
+.drop small{color:var(--muted)}
+.chip{
+  display:inline-flex;align-items:center;gap:9px;background:#0A1728;border:1px solid var(--line);
+  border-radius:999px;padding:6px 8px 6px 13px;font-size:12.5px;font-family:var(--mono);margin-top:12px;
+}
+.chip b{font-weight:500;color:var(--steel)}
+.cover-prev{display:flex;gap:14px;align-items:flex-start;margin-top:12px}
+.cover-prev img{width:82px;border:1px solid var(--line);border-radius:4px;display:block}
+
+/* ---------- repeatable rows ---------- */
+.rows{display:flex;flex-direction:column;gap:12px}
+.row-item{border:1px solid var(--line);border-radius:8px;background:#0A1728;padding:13px}
+.row-top{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.row-n{font-family:var(--mono);font-size:11px;color:var(--copper);letter-spacing:.08em}
+.row-top .spacer{flex:1}
+.empty{border:1px dashed #24384f;border-radius:8px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+
+/* ---------- board ---------- */
+.board{position:sticky;top:82px}
+.board .card-body{padding:16px 18px}
+.stat-line{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(30,49,73,.6)}
+.stat-line:last-child{border-bottom:0}
+.stat-line span{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.stat-line b{font-family:var(--mono);font-size:17px;font-weight:500}
+
+/* signature: severity ladder */
+.ladder{margin-top:16px}
+.ladder-h{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.lvl{display:grid;grid-template-columns:26px 1fr 62px;align-items:center;gap:9px;padding:1.5px 0}
+.lvl i{font-family:var(--mono);font-size:11px;font-style:normal;color:var(--muted);text-align:right}
+.lvl .bar{height:7px;border-radius:2px;background:rgba(255,255,255,.045);overflow:hidden}
+.lvl .bar>i{display:block;height:100%;border-radius:2px}
+.lvl u{font-family:var(--mono);font-size:11px;text-decoration:none;color:var(--paper);text-align:right;opacity:.85}
+.buckets{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}
+.bk{border:1px solid var(--line);border-radius:6px;padding:8px 7px;text-align:center;background:#0A1728}
+.bk em{display:block;font-style:normal;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.bk b{font-family:var(--mono);font-size:15px;font-weight:500;display:block;margin-top:3px}
+.status-msg{margin-top:12px;font-size:12.5px;min-height:18px}
+.status-msg.ok{color:#7BC79E}
+.status-msg.err{color:#E58C86}
+.board .btn.copper{width:100%;justify-content:center;margin-top:16px;padding:11px}
+.progress{height:2px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px;display:none}
+.progress.on{display:block}
+.progress>i{display:block;height:100%;width:35%;background:var(--copper);animation:slide 1.05s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+@media (prefers-reduced-motion:reduce){.progress>i{animation:none;width:100%}}
+
+.footnote{max-width:1440px;margin:0 auto;padding:8px 22px 40px;color:var(--muted);font-size:12px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <svg class="mark" viewBox="0 0 40 30" aria-hidden="true"><path d="M8 26 L15 4 h10 l7 22 h-8 l-4-13 -4 13 z" fill="none" stroke="#C98A3E" stroke-width="2.6" stroke-linejoin="round"/></svg>
+    <div class="wordmark"><b>HERITAGE</b><span>Minerals</span></div>
+    <div class="rule-v"></div>
+    <div>
+      <h1>SOC L1 Daily Report Builder</h1>
+      <p>Load the alert export, fill in the shift details, generate the Word report.</p>
+    </div>
+    <div class="mast-actions">
+      <button class="btn ghost" id="btnSave" type="button">Save draft</button>
+      <button class="btn ghost" id="btnLoad" type="button">Load draft</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+<div>
+
+  <!-- 00 OUTPUT FILE -->
+  <section class="card">
+    <div class="card-head"><span class="idx">00</span><h2>Output file</h2><span class="hint">Name of the .docx you get</span></div>
+    <div class="card-body">
+      <label class="f"><span class="lbl">File name</span><input type="text" id="fileName" placeholder="Leave blank to name it automatically"></label>
+      <p class="help">Saves as <b id="filePreview" style="font-family:var(--mono);color:var(--steel);font-weight:400">report.docx</b> — the .docx extension is added for you, and characters Windows rejects in file names are replaced with a hyphen.</p>
+    </div>
+  </section>
+
+  <!-- 01 SOURCES -->
+  <section class="card">
+    <div class="card-head"><span class="idx">01</span><h2>Source files</h2><span class="hint">Alert export required</span></div>
+    <div class="card-body">
+      <div class="grid g2">
+        <div>
+          <span class="lbl" style="display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Alert export (.xlsx / .csv)</span>
+          <div class="drop" id="dropXlsx" tabindex="0" role="button" aria-label="Choose alert export file">
+            <strong>Drop the alert export here</strong>
+            <small>or click to browse — needs Rule ID, Description, Level, Count</small>
+          </div>
+          <input type="file" id="fileXlsx" accept=".xlsx,.xlsm,.csv" class="sr">
+          <div id="xlsxChip"></div>
+        </div>
+        <div>
+          <span class="lbl" style="display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Cover page image (optional)</span>
+          <div class="drop" id="dropCover" tabindex="0" role="button" aria-label="Choose cover image">
+            <strong>Drop the cover PNG/JPG here</strong>
+            <small>Placed full-bleed as page 1. Skip it for a plain typographic cover.</small>
+          </div>
+          <input type="file" id="fileCover" accept="image/png,image/jpeg" class="sr">
+          <div id="coverPrev"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 HEADER -->
+  <section class="card">
+    <div class="card-head"><span class="idx">02</span><h2>Report header</h2></div>
+    <div class="card-body">
+      <div class="grid g3">
+        <label class="f"><span class="lbl">Customer / Project</span><input type="text" id="customer" value="Heritage Minerals"></label>
+        <label class="f"><span class="lbl">Report date</span><input type="date" id="reportDate"></label>
+        <label class="f"><span class="lbl">Report time</span><input type="time" id="reportTime"></label>
+        <label class="f"><span class="lbl">Shift</span>
+          <select id="shift">
+            <option>Shift 1</option><option selected>Shift 2</option><option>Shift 3</option>
+          </select>
+        </label>
+        <label class="f"><span class="lbl">Shift time</span><input type="text" id="shiftTime" class="mono" value="15:00 - 23:00"></label>
+        <label class="f"><span class="lbl">SOC L1 engineer</span><input type="text" id="engineer" placeholder="e.g. M Akmal"></label>
+        <label class="f"><span class="lbl">Location</span>
+          <select id="location"><option>Remote</option><option>Onsite</option><option>Hybrid</option></select>
+        </label>
+        <label class="f"><span class="lbl">Report status</span>
+          <select id="reportStatus"><option>Final</option><option>Draft</option><option>Interim</option></select>
+        </label>
+        <label class="f"><span class="lbl">Reporting period</span><input type="text" id="reportingPeriod" placeholder="Auto from report date"></label>
+      </div>
+      <p class="help">Leave the reporting period blank to reuse the report date and time.</p>
+    </div>
+  </section>
+
+  <!-- 03 SHIFT SUMMARY -->
+  <section class="card">
+    <div class="card-head"><span class="idx">03</span><h2>Shift summary</h2><span class="hint">Section 1 of the report</span></div>
+    <div class="card-body">
+      <label class="f" style="margin-bottom:14px"><span class="lbl">Summary narrative</span>
+        <textarea id="narrative" placeholder="Monitoring ran without interruption during the shift. Alert volume was dominated by infrastructure logging from vCenter and Envoy proxy…"></textarea>
+      </label>
+      <div class="grid g3">
+        <label class="f"><span class="lbl">Overall security status</span>
+          <select id="overallStatus"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select>
+        </label>
+        <label class="f"><span class="lbl">Total alerts reviewed</span><input type="number" id="alertsReviewed" min="0" value="0"></label>
+        <label class="f"><span class="lbl">Total alerts escalated</span><input type="number" id="alertsEscalated" min="0" value="0"></label>
+        <label class="f"><span class="lbl">Escalated to L2 / relevant team</span><input type="number" id="escalatedL2" min="0" value="0"></label>
+        <label class="f"><span class="lbl">Total task</span><input type="number" id="totalTask" min="0" value="0"></label>
+        <label class="f"><span class="lbl">Total task completed</span><input type="number" id="taskCompleted" min="0" value="0"></label>
+      </div>
+      <div class="btn-row">
+        <button class="btn" type="button" id="fillEvents">Use total events from export</button>
+        <button class="btn" type="button" id="fillRules">Use unique rules from export</button>
+        <button class="btn" type="button" id="fillTasks">Count tasks from section 06</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 ALERT STATISTICS -->
+  <section class="card">
+    <div class="card-head"><span class="idx">04</span><h2>Alert volume summary</h2><span class="hint">Built from the export</span></div>
+    <div class="card-body">
+      <label class="check" style="margin-bottom:12px"><input type="checkbox" id="incStats" checked><span>Include the alert volume section in the report</span></label>
+      <div class="grid g3">
+        <label class="f"><span class="lbl">Top rules to list</span><input type="number" id="topN" min="0" max="200" value="15"></label>
+        <label class="f"><span class="lbl">Description column width</span>
+          <select id="descWidth"><option value="0">Full description</option><option value="120" selected>Trim to 120 characters</option><option value="80">Trim to 80 characters</option></select>
+        </label>
+        <label class="f"><span class="lbl">Notable-alert threshold (level ≥)</span><input type="number" id="notableLevel" min="0" max="15" value="8"></label>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+        <label class="check"><input type="checkbox" id="incLevels" checked><span>Include the severity distribution table (levels 0–15 grouped Low / Medium / High / Critical)</span></label>
+        <label class="check"><input type="checkbox" id="incNotable" checked><span>Include a notable-alerts table for everything at or above the threshold level</span></label>
+        <label class="check"><input type="checkbox" id="incAppendix"><span>Append the full rule list as an appendix</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 MONITORING -->
+  <section class="card">
+    <div class="card-head"><span class="idx">05</span><h2>Monitoring &amp; alert review</h2><span class="hint" id="cntMonitor">0 rows</span></div>
+    <div class="card-body">
+      <div class="rows" id="rowsMonitor"></div>
+      <div class="btn-row">
+        <button class="btn" type="button" id="addMonitor">Add alert row</button>
+        <button class="btn" type="button" id="seedMonitor">Seed from notable alerts</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 TASKS -->
+  <section class="card">
+    <div class="card-head"><span class="idx">06</span><h2>Tasks &amp; activities</h2><span class="hint" id="cntTask">0 rows</span></div>
+    <div class="card-body">
+      <div class="rows" id="rowsTask"></div>
+      <div class="btn-row"><button class="btn" type="button" id="addTask">Add task</button></div>
+    </div>
+  </section>
+
+  <!-- 07 INCIDENTS -->
+  <section class="card">
+    <div class="card-head"><span class="idx">07</span><h2>Incidents &amp; escalations</h2><span class="hint" id="cntIncident">0 rows</span></div>
+    <div class="card-body">
+      <div class="rows" id="rowsIncident"></div>
+      <div class="btn-row"><button class="btn" type="button" id="addIncident">Add incident</button></div>
+      <p class="help">Left empty, this section is dropped from the report and the later sections renumber themselves.</p>
+    </div>
+  </section>
+
+  <!-- 08 NOTES -->
+  <section class="card">
+    <div class="card-head"><span class="idx">08</span><h2>Issues, recommendations, sign-off</h2></div>
+    <div class="card-body">
+      <div class="grid g2">
+        <label class="f"><span class="lbl">Issues &amp; constraints</span><textarea id="issues" placeholder="One per line — each line becomes a bullet."></textarea></label>
+        <label class="f"><span class="lbl">Recommendations &amp; notes</span><textarea id="recs" placeholder="One per line — each line becomes a bullet."></textarea></label>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <label class="f"><span class="lbl">Prepared by</span><input type="text" id="preparedBy" placeholder="Auto from engineer name"></label>
+        <label class="f"><span class="lbl">Reviewed by</span><input type="text" id="reviewedBy" placeholder="e.g. SOC L2 / Shift Lead"></label>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- BOARD -->
+<aside class="board">
+  <section class="card">
+    <div class="card-head"><span class="idx">→</span><h2>Shift board</h2></div>
+    <div class="card-body">
+      <div id="boardEmpty" class="empty">No export loaded yet. Drop the alert xlsx in section 01 and the numbers land here.</div>
+      <div id="boardStats" style="display:none">
+        <div class="stat-line"><span>Total events</span><b id="sTotal">0</b></div>
+        <div class="stat-line"><span>Unique rules</span><b id="sRules">0</b></div>
+        <div class="stat-line"><span>Notable rules</span><b id="sNotable">0</b></div>
+        <div class="buckets" id="sBuckets"></div>
+        <div class="ladder">
+          <div class="ladder-h"><span>Level</span><span>Events</span></div>
+          <div id="sLadder"></div>
+        </div>
+      </div>
+      <button class="btn copper" type="button" id="btnGenerate">Generate Word report</button>
+      <div class="progress" id="prog"><i></i></div>
+      <div class="status-msg" id="msg" role="status" aria-live="polite"></div>
+    </div>
+  </section>
+</aside>
+</main>
+
+<p class="footnote">Everything stays in the browser — the export is parsed locally and the .docx is assembled locally. Nothing is uploaded.</p>
+
+<script>
+/* ============================================================
+   State
+   ============================================================ */
+const state = { alerts:[], stats:null, fileName:"", cover:null };
+
+const $  = (id)=>document.getElementById(id);
+const nf = (n)=>Number(n||0).toLocaleString('en-US');
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const SHIFT_TIMES = {"Shift 1":"07:00 - 15:00","Shift 2":"15:00 - 23:00","Shift 3":"23:00 - 07:00"};
+const BUCKETS = [
+  {key:"Low",      min:0,  max:3,  hex:"1E7B4F", css:"var(--low)"},
+  {key:"Medium",   min:4,  max:7,  hex:"B7860B", css:"var(--med)"},
+  {key:"High",     min:8,  max:11, hex:"C0621F", css:"var(--high)"},
+  {key:"Critical", min:12, max:15, hex:"B3352D", css:"var(--crit)"}
+];
+const bucketOf = (lvl)=> (BUCKETS.find(b=>lvl>=b.min&&lvl<=b.max) || BUCKETS[3]).key;
+
+/* ============================================================
+   Parsing the alert export
+   ============================================================ */
+const HEADER_HINTS = {
+  id:   ["rule id","ruleid","rule.id","rule_id","id","sid","signature id"],
+  desc: ["description","rule description","rule.description","alert","message","event","name"],
+  lvl:  ["level","rule level","rule.level","severity","sev","priority"],
+  cnt:  ["count","total","events","doc_count","hits","volume","frequency"]
+};
+function matchCol(header){
+  const h = String(header||"").trim().toLowerCase();
+  for(const key of ["id","desc","lvl","cnt"]) if(HEADER_HINTS[key].includes(h)) return key;
+  for(const key of ["id","desc","lvl","cnt"]) if(HEADER_HINTS[key].some(x=>h.includes(x))) return key;
+  return null;
+}
+function parseSheet(matrix){
+  let headerRow = -1, map = {};
+  for(let r=0; r<Math.min(matrix.length,15); r++){
+    const found = {};
+    (matrix[r]||[]).forEach((cell,c)=>{ const k = matchCol(cell); if(k && found[k]===undefined) found[k]=c; });
+    if(found.desc!==undefined && found.cnt!==undefined){ headerRow=r; map=found; break; }
+  }
+  if(headerRow < 0) throw new Error("Could not find the header row. The sheet needs columns for description, level and count.");
+  const out = [];
+  for(let r=headerRow+1; r<matrix.length; r++){
+    const row = matrix[r] || [];
+    const desc = String(row[map.desc] ?? "").trim();
+    const cnt  = Number(String(row[map.cnt] ?? "").replace(/[, ]/g,""));
+    if(!desc && !cnt) continue;
+    if(!isFinite(cnt)) continue;
+    out.push({
+      id: String(row[map.id] ?? "").trim(),
+      desc,
+      level: Math.max(0, Math.min(15, Math.round(Number(row[map.lvl] ?? 0)) || 0)),
+      count: Math.round(cnt) || 0
+    });
+  }
+  if(!out.length) throw new Error("The header was found but no data rows followed it.");
+  return out;
+}
+function computeStats(alerts){
+  const totalEvents = alerts.reduce((s,a)=>s+a.count,0);
+  const levels = Array.from({length:16},(_,i)=>({level:i,rules:0,events:0}));
+  alerts.forEach(a=>{ levels[a.level].rules++; levels[a.level].events += a.count; });
+  const buckets = BUCKETS.map(b=>{
+    const slice = alerts.filter(a=>a.level>=b.min && a.level<=b.max);
+    const events = slice.reduce((s,a)=>s+a.count,0);
+    return {key:b.key, hex:b.hex, css:b.css, range:b.min+"–"+b.max, rules:slice.length, events,
+            pct: totalEvents ? (events/totalEvents*100) : 0};
+  });
+  return {
+    totalEvents, ruleCount: alerts.length, levels, buckets,
+    sorted: alerts.slice().sort((a,b)=>b.count-a.count),
+    byRisk: alerts.slice().sort((a,b)=> b.level-a.level || b.count-a.count)
+  };
+}
+
+/* Source system guessed from the rule description */
+const SOURCE_RULES = [
+  [/fortipam/i,"FortiPAM"], [/fortigate|fortinet/i,"FortiGate"],
+  [/vmware vcenter|vcenter|vpxa|hostd|healthd/i,"VMware vCenter"],
+  [/envoy proxy|vmware envoy/i,"VMware Envoy Proxy"],
+  [/active directory|\bAD\b|domain administrator/i,"Active Directory"],
+  [/veeam/i,"Veeam Backup"], [/registry|integrity checksum/i,"Wazuh FIM"],
+  [/windows|logon|logoff|shadow copy|vss|database engine/i,"Windows"],
+  [/web server|http/i,"Web Server"], [/syslog/i,"Syslog"], [/brahma/i,"Brahma Server"]
+];
+const SEV_WORD = /^(high|medium|low|critical|info|informational|warning|warn|alert|audit|notice|error)$/i;
+function guessSource(desc){
+  const m = String(desc).match(/^([A-Za-z0-9 .\-]{2,28}):/);
+  if(m){
+    const prefix = m[1].trim().replace(/\s+(high|medium|low|critical|info|warning|alert|audit)$/i,'').trim();
+    if(prefix && !SEV_WORD.test(prefix)) return prefix;
+  }
+  for(const [re,name] of SOURCE_RULES) if(re.test(desc)) return name;
+  return "SIEM";
+}
+const trim = (s,n)=> (!n || s.length<=n) ? s : s.slice(0,n-1).trimEnd()+"…";
+
+/* ============================================================
+   File intake
+   ============================================================ */
+function wireDrop(zoneId, inputId, handler){
+  const zone = $(zoneId), input = $(inputId);
+  zone.addEventListener('click', ()=>input.click());
+  zone.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); input.click(); }});
+  zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('over'));
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.classList.remove('over');
+    if(e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', ()=>{ if(input.files[0]) handler(input.files[0]); });
+}
+
+async function loadAlerts(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const matrix = XLSX.utils.sheet_to_json(sheet, {header:1, blankrows:false, defval:""});
+    state.alerts = parseSheet(matrix);
+    state.stats  = computeStats(state.alerts);
+    state.fileName = file.name;
+    $('xlsxChip').innerHTML = '<span class="chip"><b>'+esc(file.name)+'</b> · '+nf(state.stats.ruleCount)+' rules · '+nf(state.stats.totalEvents)+' events</span>';
+    if(Number($('alertsReviewed').value||0) === 0) $('alertsReviewed').value = state.stats.totalEvents;
+    renderBoard(); setMsg('Export loaded. '+nf(state.stats.totalEvents)+' events across '+nf(state.stats.ruleCount)+' rules.','ok');
+  }catch(err){
+    state.alerts=[]; state.stats=null; renderBoard();
+    $('xlsxChip').innerHTML='';
+    setMsg('Could not read that file: '+err.message,'err');
+  }
+}
+
+function loadCover(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      state.cover = {dataUrl:reader.result, w:img.naturalWidth, h:img.naturalHeight,
+                     type: file.type==='image/png' ? 'png' : 'jpeg', name:file.name};
+      renderCover(); persistCover();
+      setMsg('Cover image ready ('+img.naturalWidth+'×'+img.naturalHeight+').','ok');
+    };
+    img.onerror = ()=>setMsg('That image could not be decoded. Use a PNG or JPG.','err');
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function renderCover(){
+  const host = $('coverPrev');
+  if(!state.cover){ host.innerHTML=''; return; }
+  host.innerHTML = '<div class="cover-prev"><img src="'+state.cover.dataUrl+'" alt="Cover preview"><div>'+
+    '<div style="font-size:12.5px;font-family:var(--mono)">'+esc(state.cover.name||'cover')+'</div>'+
+    '<div class="help">'+state.cover.w+' × '+state.cover.h+' px · placed as page 1</div>'+
+    '<button class="btn danger" type="button" id="dropCoverBtn" style="margin-top:8px">Remove cover</button></div></div>';
+  $('dropCoverBtn').onclick = ()=>{ state.cover=null; renderCover(); persistCover(); };
+}
+
+/* ============================================================
+   Board
+   ============================================================ */
+function renderBoard(){
+  const s = state.stats;
+  $('boardEmpty').style.display = s ? 'none' : 'block';
+  $('boardStats').style.display = s ? 'block' : 'none';
+  if(!s) return;
+  const threshold = Number($('notableLevel').value||8);
+  $('sTotal').textContent   = nf(s.totalEvents);
+  $('sRules').textContent   = nf(s.ruleCount);
+  $('sNotable').textContent = nf(state.alerts.filter(a=>a.level>=threshold).length);
+  $('sBuckets').innerHTML = s.buckets.map(b=>
+    '<div class="bk"><em>'+b.key+'</em><b style="color:'+b.css+'">'+nf(b.events)+'</b></div>').join('');
+  const max = Math.max(1, ...s.levels.map(l=>l.events));
+  $('sLadder').innerHTML = s.levels.map(l=>{
+    const b = BUCKETS.find(x=>l.level>=x.min && l.level<=x.max);
+    const w = l.events ? Math.max(2, l.events/max*100) : 0;
+    return '<div class="lvl"><i>'+String(l.level).padStart(2,'0')+'</i>'+
+      '<div class="bar"><i style="width:'+w+'%;background:'+b.css+'"></i></div>'+
+      '<u>'+(l.events?nf(l.events):'·')+'</u></div>';
+  }).join('');
+}
+function setMsg(text, kind){
+  const m = $('msg'); m.textContent = text || ''; m.className = 'status-msg ' + (kind||'');
+}
+
+/* ============================================================
+   Repeatable rows
+   ============================================================ */
+const SEVERITIES = ["Low","Medium","High","Critical","Informational"];
+const STATUSES   = ["Closed","Monitoring","Escalated","Open","In Progress"];
+const VERDICTS   = ["False Positive","True Positive","Benign True Positive","Under Analysis","Informational"];
+
+function field(label, html){
+  return '<label class="f"><span class="lbl">'+label+'</span>'+html+'</label>';
+}
+function sel(cls, options, chosen){
+  return '<select class="'+cls+'">'+options.map(o=>'<option'+(o===chosen?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select>';
+}
+function txt(cls, value, placeholder){
+  return '<input type="text" class="'+cls+'" value="'+esc(value||'')+'" placeholder="'+esc(placeholder||'')+'">';
+}
+function area(cls, value, placeholder){
+  return '<textarea class="'+cls+'" placeholder="'+esc(placeholder||'')+'">'+esc(value||'')+'</textarea>';
+}
+
+const ROW_TEMPLATES = {
+  monitor: d=>'<div class="grid g3">'+
+      field('Time', txt('f-time', d.time, '18:05'))+
+      field('Source / system', txt('f-source', d.source, 'Wazuh · FortiGate'))+
+      field('Severity', sel('f-sev', SEVERITIES, d.sev||'Medium'))+
+    '</div><div class="grid g2" style="margin-top:12px">'+
+      field('Alert / event', area('f-event', d.event, 'Rule name or alert title'))+
+      field('Analysis / validation', area('f-analysis', d.analysis, 'What you checked, what it turned out to be'))+
+    '</div><div class="grid g2" style="margin-top:12px">'+
+      field('Action taken', txt('f-action', d.action, 'Monitored, no further action'))+
+      field('Status', sel('f-status', STATUSES, d.status||'Closed'))+
+    '</div>',
+  task: d=>'<div class="grid g2">'+
+      field('Task', txt('f-task', d.task, 'Daily health check'))+
+      field('Status', sel('f-status', ["Completed","In Progress","Pending","Blocked"], d.status||'Completed'))+
+    '</div><div class="grid g2" style="margin-top:12px">'+
+      field('Detail', area('f-detail', d.detail, 'What the task involved'))+
+      field('Remarks', area('f-remarks', d.remarks, 'Anything worth flagging'))+
+    '</div>',
+  incident: d=>'<div class="grid g3">'+
+      field('Time', txt('f-time', d.time, '19:20'))+
+      field('Incident', txt('f-title', d.title, 'Short incident title'))+
+      field('Severity', sel('f-sev', SEVERITIES, d.sev||'High'))+
+    '</div><div class="grid g3" style="margin-top:12px">'+
+      field('Escalated to', txt('f-to', d.to, 'SOC L2 / Infra team'))+
+      field('Ticket / reference', txt('f-ticket', d.ticket, 'INC-0001'))+
+      field('Status', sel('f-status', STATUSES, d.status||'Escalated'))+
+    '</div><div style="margin-top:12px">'+
+      field('Action &amp; handover notes', area('f-notes', d.notes, 'What was done and what L2 needs to know'))+
+    '</div>'
+};
+const ROW_LABEL = {monitor:'Alert', task:'Task', incident:'Incident'};
+
+function addRow(kind, data){
+  const host = $('rows'+kind[0].toUpperCase()+kind.slice(1));
+  const item = document.createElement('div');
+  item.className = 'row-item';
+  item.innerHTML = '<div class="row-top"><span class="row-n"></span><span class="spacer"></span>'+
+      '<button class="btn danger" type="button">Remove</button></div>'+
+      '<div class="row-fields"></div>';
+  item.querySelector('.row-fields').innerHTML = ROW_TEMPLATES[kind](data||{});
+  item.querySelector('.btn.danger').onclick = ()=>{ item.remove(); renumber(kind); };
+  host.appendChild(item);
+  renumber(kind);
+  return item;
+}
+function renumber(kind){
+  const host = $('rows'+kind[0].toUpperCase()+kind.slice(1));
+  const items = [...host.children];
+  items.forEach((el,i)=>{ el.querySelector('.row-n').textContent = ROW_LABEL[kind]+' '+String(i+1).padStart(2,'0'); });
+  $('cnt'+kind[0].toUpperCase()+kind.slice(1)).textContent = items.length + (items.length===1?' row':' rows');
+  if(!items.length && !host.querySelector('.empty')){
+    const e=document.createElement('div'); e.className='empty';
+    e.textContent='No rows yet.'; host.appendChild(e);
+  }
+  if(items.length) [...host.querySelectorAll('.empty')].forEach(e=>e.remove());
+}
+function readRows(kind, fields){
+  const host = $('rows'+kind[0].toUpperCase()+kind.slice(1));
+  return [...host.querySelectorAll('.row-item')].map(item=>{
+    const o = {};
+    for(const [key, cls] of Object.entries(fields)){
+      const el = item.querySelector('.'+cls);
+      o[key] = el ? el.value.trim() : '';
+    }
+    return o;
+  });
+}
+const MONITOR_FIELDS  = {time:'f-time',source:'f-source',sev:'f-sev',event:'f-event',analysis:'f-analysis',action:'f-action',status:'f-status'};
+const TASK_FIELDS     = {task:'f-task',status:'f-status',detail:'f-detail',remarks:'f-remarks'};
+const INCIDENT_FIELDS = {time:'f-time',title:'f-title',sev:'f-sev',to:'f-to',ticket:'f-ticket',status:'f-status',notes:'f-notes'};
+
+function seedMonitorRows(){
+  if(!state.stats){ setMsg('Load the alert export first — the seed rows come from it.','err'); return; }
+  const threshold = Number($('notableLevel').value||8);
+  const picks = state.alerts.filter(a=>a.level>=threshold).sort((a,b)=>b.level-a.level||b.count-a.count).slice(0,10);
+  if(!picks.length){ setMsg('Nothing in the export reaches level '+threshold+'. Lower the threshold in section 04.','err'); return; }
+  picks.forEach(a=>addRow('monitor',{
+    source: guessSource(a.desc),
+    sev: bucketOf(a.level),
+    event: trim(a.desc,160),
+    analysis: 'Rule '+(a.id||'—')+' (level '+a.level+') triggered '+nf(a.count)+' times during the reporting period. Validation: ',
+    action: '', status: 'Monitoring'
+  }));
+  setMsg('Seeded '+picks.length+' rows from alerts at level '+threshold+' and above. Fill in the validation notes.','ok');
+}
+
+/* ============================================================
+   Model
+   ============================================================ */
+function fmtDate(iso){
+  if(!iso) return '';
+  const [y,m,d] = iso.split('-').map(Number);
+  if(!y||!m||!d) return iso;
+  return d + ' ' + MONTHS[m-1] + ' ' + y;
+}
+function fmtDateTime(iso, time){ return (fmtDate(iso) + (time ? ' ' + time : '')).trim(); }
+
+function collectModel(){
+  const stamp = fmtDateTime($('reportDate').value, $('reportTime').value);
+  const engineer = $('engineer').value.trim();
+  const topN = Number($('topN').value||0);
+  const descW = Number($('descWidth').value||0);
+  const threshold = Number($('notableLevel').value||8);
+  const s = state.stats;
+  return {
+    header:{
+      customer: $('customer').value.trim() || 'Heritage Minerals',
+      reportDate: stamp,
+      shift: $('shift').value,
+      shiftTime: $('shiftTime').value.trim(),
+      engineer: engineer || '—',
+      location: $('location').value,
+      reportingPeriod: $('reportingPeriod').value.trim() || stamp,
+      reportStatus: $('reportStatus').value
+    },
+    summary:{
+      narrative: $('narrative').value.trim(),
+      status: $('overallStatus').value,
+      reviewed: $('alertsReviewed').value || '0',
+      escalated: $('alertsEscalated').value || '0',
+      escalatedL2: $('escalatedL2').value || '0',
+      tasks: $('totalTask').value || '0',
+      tasksDone: $('taskCompleted').value || '0'
+    },
+    stats: (s && $('incStats').checked) ? {
+      fileName: state.fileName,
+      totalEvents: s.totalEvents, ruleCount: s.ruleCount,
+      buckets: s.buckets,
+      levels: s.levels.filter(l=>l.events>0),
+      top: s.sorted.slice(0, topN).map(a=>({...a, desc:trim(a.desc,descW), pct:(a.count/s.totalEvents*100)})),
+      notable: $('incNotable').checked ? state.alerts.filter(a=>a.level>=threshold)
+                 .sort((a,b)=>b.level-a.level||b.count-a.count)
+                 .map(a=>({...a, desc:trim(a.desc,descW), source:guessSource(a.desc), bucket:bucketOf(a.level)})) : [],
+      appendix: $('incAppendix').checked ? s.sorted.map(a=>({...a, desc:trim(a.desc,descW)})) : [],
+      threshold, topN,
+      includeLevels: $('incLevels').checked
+    } : null,
+    monitor: readRows('monitor', MONITOR_FIELDS),
+    tasks:   readRows('task', TASK_FIELDS),
+    incidents: readRows('incident', INCIDENT_FIELDS),
+    issues: $('issues').value.split('\n').map(x=>x.trim()).filter(Boolean),
+    recs:   $('recs').value.split('\n').map(x=>x.trim()).filter(Boolean),
+    preparedBy: $('preparedBy').value.trim() || engineer || '—',
+    reviewedBy: $('reviewedBy').value.trim() || '—'
+  };
+}
+
+/* ============================================================
+   DOCX builder — pure, no DOM. Kept self-contained on purpose.
+   ============================================================ */
+/*<docx-builder>*/
+function buildDocx(model, cover, JSZipCtor, outputType){
+  const PAGE_W=11906, PAGE_H=16838, MX=1080, MY=1134, CW=9740, EMU=635;
+  const NAVY='1F4E79', NAVY_MID='2E74B5', LABEL_FILL='DCE9F7', ZEBRA='F4F8FC', BORDER='8EA9C6', TEXT='1F2933';
+  const SEV_HEX={Low:'1E7B4F',Medium:'B7860B',High:'C0621F',Critical:'B3352D',Informational:'55636F'};
+
+  const esc = v => String(v==null?'':v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');
+  const num = n => Number(n||0).toLocaleString('en-US');
+
+  /* ---- runs & paragraphs ---- */
+  function run(text, o){
+    o = o||{};
+    const rPr = [];
+    rPr.push('<w:rFonts w:ascii="'+(o.font||'Calibri')+'" w:hAnsi="'+(o.font||'Calibri')+'" w:cs="'+(o.font||'Calibri')+'"/>');
+    if(o.b) rPr.push('<w:b/>');
+    if(o.i) rPr.push('<w:i/>');
+    if(o.caps) rPr.push('<w:caps/>');
+    if(o.color) rPr.push('<w:color w:val="'+o.color+'"/>');
+    if(o.spacing) rPr.push('<w:spacing w:val="'+o.spacing+'"/>');
+    const sz = o.size||20;
+    rPr.push('<w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/>');
+    const parts = String(text==null?'':text).split('\n');
+    return parts.map((piece,i)=>
+      '<w:r><w:rPr>'+rPr.join('')+'</w:rPr>'+(i?'<w:br/>':'')+
+      '<w:t xml:space="preserve">'+esc(piece)+'</w:t></w:r>').join('');
+  }
+  function para(text, o){
+    o = o||{};
+    const pPr = [];
+    if(o.keepNext) pPr.push('<w:keepNext/>');
+    if(o.borderBottom) pPr.push('<w:pBdr><w:bottom w:val="single" w:sz="'+(o.borderSz||6)+'" w:space="2" w:color="'+(o.borderColor||NAVY)+'"/></w:pBdr>');
+    if(o.fill) pPr.push('<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>');
+    pPr.push('<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?60:o.after)+'" w:line="'+(o.line||260)+'" w:lineRule="auto"/>');
+    if(o.bullet) pPr.push('<w:ind w:left="360" w:hanging="220"/>');
+    if(o.align) pPr.push('<w:jc w:val="'+o.align+'"/>');
+    const body = o.raw ? o.raw : run(o.bullet ? '' : text, o);
+    const bulletRun = o.bullet ? run('\u2022\t'+text, o) : '';
+    return '<w:p>'+(pPr.length?'<w:pPr>'+pPr.join('')+(o.sectPr||'')+'</w:pPr>':'')+(o.bullet?bulletRun:body)+'</w:p>';
+  }
+  const heading = (text)=> para(text, {size:26, b:true, color:NAVY, before:300, after:120, keepNext:true});
+  const empty   = ()=> para('', {size:12, after:0});
+
+  /* ---- tables ---- */
+  function cell(c, colWidth){
+    const tcPr = ['<w:tcW w:w="'+colWidth+'" w:type="dxa"/>'];
+    if(c.span && c.span>1) tcPr.splice(1,0,'<w:gridSpan w:val="'+c.span+'"/>');
+    if(c.fill) tcPr.push('<w:shd w:val="clear" w:color="auto" w:fill="'+c.fill+'"/>');
+    tcPr.push('<w:tcMar><w:top w:w="50" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:bottom w:w="50" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar>');
+    tcPr.push('<w:vAlign w:val="'+(c.valign||'center')+'"/>');
+    const text = c.text==null ? '' : String(c.text);
+    const body = text.split('\n').map((line,i,arr)=>
+      para(line, {size:c.size||18, b:c.b, i:c.i, color:c.color||TEXT, align:c.align,
+                  after:(i===arr.length-1?0:40), line:250})).join('');
+    return '<w:tc><w:tcPr>'+tcPr.join('')+'</w:tcPr>'+body+'</w:tc>';
+  }
+  function table(cols, rows){
+    const grid = cols.map(w=>'<w:gridCol w:w="'+w+'"/>').join('');
+    const body = rows.map(r=>{
+      const trPr = ['<w:cantSplit/>'];
+      if(r.header) trPr.push('<w:tblHeader/>');
+      let ci = 0;
+      const cells = r.cells.map(c=>{
+        let w = 0; const span = c.span||1;
+        for(let k=0;k<span;k++) w += (cols[ci+k]||0);
+        ci += span;
+        return cell(c, w);
+      }).join('');
+      return '<w:tr><w:trPr>'+trPr.join('')+'</w:trPr>'+cells+'</w:tr>';
+    }).join('');
+    const b = (side)=>'<w:'+side+' w:val="single" w:sz="4" w:space="0" w:color="'+BORDER+'"/>';
+    return '<w:tbl><w:tblPr><w:tblW w:w="'+cols.reduce((a,c)=>a+c,0)+'" w:type="dxa"/>'+
+      '<w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(b).join('')+'</w:tblBorders>'+
+      '<w:tblLayout w:type="fixed"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>'+
+      '</w:tblPr><w:tblGrid>'+grid+'</w:tblGrid>'+body+'</w:tbl>';
+  }
+  const headRow = (labels, size)=> ({header:true, cells: labels.map(t=>
+    (typeof t==='object') ? Object.assign({fill:NAVY, b:true, color:'FFFFFF', size:size||16, align:'center'}, t)
+                          : {text:t, fill:NAVY, b:true, color:'FFFFFF', size:size||16, align:'center'})});
+
+  /* ---- document body ---- */
+  const parts = [];
+  let sectionNo = 0;
+  const nextHeading = (title)=> heading((++sectionNo)+'. '+title);
+
+  /* cover */
+  const coverSect = '<w:sectPr><w:pgSz w:w="'+PAGE_W+'" w:h="'+PAGE_H+'"/>'+
+    '<w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>'+
+    '<w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>';
+  if(cover){
+    let cx = PAGE_W*EMU, cy = Math.round(cx * cover.h / cover.w);
+    if(cy > PAGE_H*EMU){ cy = PAGE_H*EMU; cx = Math.round(cy * cover.w / cover.h); }
+    const drawing = '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'+
+      '<wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:effectExtent l="0" t="0" r="0" b="0"/>'+
+      '<wp:docPr id="1" name="Cover"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>'+
+      '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'+
+      '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'+
+      '<pic:nvPicPr><pic:cNvPr id="1" name="cover.'+cover.ext+'"/><pic:cNvPicPr/></pic:nvPicPr>'+
+      '<pic:blipFill><a:blip r:embed="rId5"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'+
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm>'+
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>'+
+      '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+    parts.push(para('', {raw:drawing, after:0, line:240, align:'center', sectPr:coverSect}));
+  }else{
+    const coverSectText = '<w:sectPr><w:pgSz w:w="'+PAGE_W+'" w:h="'+PAGE_H+'"/>'+
+      '<w:pgMar w:top="'+MY+'" w:right="1440" w:bottom="'+MY+'" w:left="1440" w:header="0" w:footer="0" w:gutter="0"/>'+
+      '<w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>';
+    const cv = [];
+    cv.push(para('', {after:3600}));
+    cv.push(para(model.header.customer.toUpperCase(), {size:30, b:true, color:NAVY, align:'center', spacing:60, after:0}));
+    cv.push(para('Security Operations Center', {size:18, color:NAVY_MID, align:'center', caps:true, spacing:80, after:420}));
+    cv.push(para('DAILY L1 SOC REPORT', {size:56, b:true, color:'0F2C4C', align:'center', after:180}));
+    cv.push(para('', {borderBottom:true, borderSz:12, borderColor:'C98A3E', after:360}));
+    cv.push(para(model.header.reportDate, {size:24, align:'center', color:TEXT, after:60}));
+    cv.push(para(model.header.shift+' · '+model.header.shiftTime+' · '+model.header.location, {size:20, align:'center', color:'55636F', after:60}));
+    cv.push(para('Prepared by '+model.header.engineer, {size:20, align:'center', color:'55636F', after:4200}));
+    cv.push(para('CONFIDENTIAL DOCUMENT', {size:18, b:true, color:'C98A3E', align:'center', caps:true, spacing:60, after:60}));
+    cv.push(para('This report contains information related to daily security monitoring activities and is intended only for authorized personnel.',
+      {size:16, color:'55636F', align:'center', after:0}));
+    const last = cv.pop().replace('</w:pPr>', coverSectText+'</w:pPr>');
+    parts.push(cv.join('')+last);
+  }
+
+  /* title + header table */
+  parts.push(para('SOC L1 DAILY OPERATIONAL REPORT',
+    {size:34, b:true, color:NAVY, align:'center', before:120, after:80, spacing:20}));
+  parts.push(para('', {borderBottom:true, borderSz:12, borderColor:'C98A3E', after:220}));
+
+  const L = {fill:LABEL_FILL, b:true, color:NAVY, size:18};
+  const V = {size:18};
+  const hdr = model.header;
+  parts.push(table([1950,2920,1950,2920], [
+    {cells:[Object.assign({text:'Customer / Project'},L), Object.assign({text:hdr.customer},V),
+            Object.assign({text:'Report Date'},L),        Object.assign({text:hdr.reportDate},V)]},
+    {cells:[Object.assign({text:'Shift'},L),              Object.assign({text:hdr.shift},V),
+            Object.assign({text:'Shift Time'},L),         Object.assign({text:hdr.shiftTime},V)]},
+    {cells:[Object.assign({text:'SOC L1 Engineer'},L),    Object.assign({text:hdr.engineer},V),
+            Object.assign({text:'Location'},L),           Object.assign({text:hdr.location},V)]},
+    {cells:[Object.assign({text:'Reporting Period'},L),   Object.assign({text:hdr.reportingPeriod},V),
+            Object.assign({text:'Report Status'},L),      Object.assign({text:hdr.reportStatus},V)]}
+  ]));
+  parts.push(empty());
+
+  /* 1. shift summary */
+  parts.push(nextHeading('Shift Summary'));
+  parts.push(para(model.summary.narrative ||
+    'Security monitoring activities, notable alerts, incidents, escalations and the overall operational condition during the shift are summarised below.',
+    {after:140}));
+  const sm = model.summary;
+  parts.push(table([4200,5540], [
+    {cells:[Object.assign({text:'Overall Security Status'},L),
+            {text:sm.status, size:18, b:true, color:SEV_HEX[sm.status]||TEXT}]},
+    {cells:[Object.assign({text:'Total Alerts Reviewed'},L), {text:num(sm.reviewed), size:18}]},
+    {cells:[Object.assign({text:'Total Alerts Escalated'},L), {text:num(sm.escalated), size:18}]},
+    {cells:[Object.assign({text:'Escalated to L2 / Relevant Team'},L), {text:num(sm.escalatedL2), size:18}]},
+    {cells:[Object.assign({text:'Total Task'},L), {text:num(sm.tasks), size:18}]},
+    {cells:[Object.assign({text:'Total Task Completed'},L), {text:num(sm.tasksDone), size:18}]}
+  ]));
+  parts.push(empty());
+
+  /* 2. alert volume */
+  const st = model.stats;
+  if(st){
+    parts.push(nextHeading('Alert Volume Summary'));
+    parts.push(para('Aggregated from the SIEM alert export'+(st.fileName?' ('+st.fileName+')':'')+
+      '. A total of '+num(st.totalEvents)+' events were generated by '+num(st.ruleCount)+
+      ' distinct detection rules during the reporting period.', {after:140}));
+
+    if(st.includeLevels){
+      parts.push(para('Severity distribution', {size:20, b:true, color:NAVY_MID, before:60, after:80, keepNext:true}));
+      parts.push(table([2400,1500,1900,2040,1900], [
+        headRow(['Severity','Rule Level','Rules','Events','Share of Events']),
+        ...st.buckets.map(b=>({cells:[
+          {text:b.key, b:true, color:b.hex, size:18},
+          {text:b.range, align:'center', size:18},
+          {text:num(b.rules), align:'center', size:18},
+          {text:num(b.events), align:'center', size:18},
+          {text:b.pct.toFixed(1)+' %', align:'center', size:18}
+        ]})),
+        {cells:[{text:'Total', b:true, fill:LABEL_FILL, color:NAVY, size:18},
+                {text:'0–15', align:'center', fill:LABEL_FILL, size:18},
+                {text:num(st.ruleCount), align:'center', b:true, fill:LABEL_FILL, size:18},
+                {text:num(st.totalEvents), align:'center', b:true, fill:LABEL_FILL, size:18},
+                {text:'100.0 %', align:'center', fill:LABEL_FILL, size:18}]}
+      ]));
+      parts.push(empty());
+    }
+
+    if(st.top.length){
+      parts.push(para('Top '+st.top.length+' triggered rules by volume', {size:20, b:true, color:NAVY_MID, before:60, after:80, keepNext:true}));
+      parts.push(table([560,1080,4700,900,1400,1100], [
+        headRow(['No.','Rule ID','Description','Level','Events','Share']),
+        ...st.top.map((a,i)=>({cells:[
+          {text:String(i+1), align:'center', size:16, fill:i%2?ZEBRA:null},
+          {text:a.id||'—', align:'center', size:16, fill:i%2?ZEBRA:null},
+          {text:a.desc, size:16, fill:i%2?ZEBRA:null},
+          {text:String(a.level), align:'center', size:16, b:true, color:SEV_HEX[bucket(a.level)], fill:i%2?ZEBRA:null},
+          {text:num(a.count), align:'center', size:16, fill:i%2?ZEBRA:null},
+          {text:a.pct.toFixed(2)+' %', align:'center', size:16, fill:i%2?ZEBRA:null}
+        ]}))
+      ]));
+      parts.push(empty());
+    }
+
+    if(st.notable.length){
+      parts.push(para('Notable alerts at level '+st.threshold+' and above', {size:20, b:true, color:NAVY_MID, before:60, after:80, keepNext:true}));
+      parts.push(table([560,1080,1700,3700,900,1800], [
+        headRow(['No.','Rule ID','Source / System','Description','Level','Events']),
+        ...st.notable.map((a,i)=>({cells:[
+          {text:String(i+1), align:'center', size:16, fill:i%2?ZEBRA:null},
+          {text:a.id||'—', align:'center', size:16, fill:i%2?ZEBRA:null},
+          {text:a.source, size:16, fill:i%2?ZEBRA:null},
+          {text:a.desc, size:16, fill:i%2?ZEBRA:null},
+          {text:String(a.level), align:'center', size:16, b:true, color:SEV_HEX[a.bucket], fill:i%2?ZEBRA:null},
+          {text:num(a.count), align:'center', size:16, fill:i%2?ZEBRA:null}
+        ]}))
+      ]));
+      parts.push(empty());
+    }
+  }
+
+  /* 3. monitoring & alert review */
+  parts.push(nextHeading('Monitoring & Alert Review'));
+  if(model.monitor.length){
+    parts.push(table([440,780,1250,1700,900,2450,1200,1020], [
+      headRow(['No.','Time','Source / System','Alert / Event','Severity','Analysis / Validation','Action Taken','Status'], 15),
+      ...model.monitor.map((r,i)=>({cells:[
+        {text:String(i+1), align:'center', size:15},
+        {text:r.time, align:'center', size:15},
+        {text:r.source, size:15},
+        {text:r.event, size:15},
+        {text:r.sev, align:'center', size:15, b:true, color:SEV_HEX[r.sev]||TEXT},
+        {text:r.analysis, size:15, valign:'top'},
+        {text:r.action, size:15},
+        {text:r.status, align:'center', size:15}
+      ]}))
+    ]));
+  }else{
+    parts.push(para('No alerts required individual review during this shift.', {i:true, color:'55636F'}));
+  }
+  parts.push(empty());
+
+  /* 4. incidents (optional) */
+  if(model.incidents.length){
+    parts.push(nextHeading('Incident Handling & Escalation'));
+    parts.push(table([440,780,2200,900,1600,1200,2620], [
+      headRow(['No.','Time','Incident','Severity','Escalated To','Status','Action & Handover Notes'], 15),
+      ...model.incidents.map((r,i)=>({cells:[
+        {text:String(i+1), align:'center', size:15},
+        {text:r.time, align:'center', size:15},
+        {text:r.title + (r.ticket ? '\n'+r.ticket : ''), size:15},
+        {text:r.sev, align:'center', size:15, b:true, color:SEV_HEX[r.sev]||TEXT},
+        {text:r.to, size:15},
+        {text:r.status, align:'center', size:15},
+        {text:r.notes, size:15, valign:'top'}
+      ]}))
+    ]));
+    parts.push(empty());
+  }
+
+  /* 5. tasks */
+  parts.push(nextHeading('Task & Activity Log'));
+  if(model.tasks.length){
+    parts.push(table([560,2300,3600,1280,2000], [
+      headRow(['No.','Task','Detail','Status','Remarks']),
+      ...model.tasks.map((r,i)=>({cells:[
+        {text:String(i+1), align:'center', size:16},
+        {text:r.task, size:16},
+        {text:r.detail, size:16, valign:'top'},
+        {text:r.status, align:'center', size:16},
+        {text:r.remarks, size:16, valign:'top'}
+      ]}))
+    ]));
+  }else{
+    parts.push(para('No scheduled tasks were logged for this shift.', {i:true, color:'55636F'}));
+  }
+  parts.push(empty());
+
+  /* 6. issues */
+  parts.push(nextHeading('Issues & Constraints'));
+  if(model.issues.length) model.issues.forEach(t=>parts.push(para(t, {bullet:true, after:60})));
+  else parts.push(para('No issues or constraints were encountered during the shift.', {i:true, color:'55636F'}));
+
+  /* 7. recommendations */
+  parts.push(nextHeading('Recommendations & Notes'));
+  if(model.recs.length) model.recs.forEach(t=>parts.push(para(t, {bullet:true, after:60})));
+  else parts.push(para('No further recommendations at this time.', {i:true, color:'55636F'}));
+  parts.push(empty());
+
+  /* appendix */
+  if(st && st.appendix && st.appendix.length){
+    parts.push(para('', {raw:'<w:r><w:br w:type="page"/></w:r>', after:0}));
+    parts.push(para('Appendix A — Full Rule List', {size:26, b:true, color:NAVY, before:0, after:120, keepNext:true}));
+    parts.push(para('All '+num(st.appendix.length)+' detection rules that triggered during the reporting period, ordered by event volume.', {after:140}));
+    parts.push(table([560,1180,5300,900,1800], [
+      headRow(['No.','Rule ID','Description','Level','Events']),
+      ...st.appendix.map((a,i)=>({cells:[
+        {text:String(i+1), align:'center', size:15, fill:i%2?ZEBRA:null},
+        {text:a.id||'—', align:'center', size:15, fill:i%2?ZEBRA:null},
+        {text:a.desc, size:15, fill:i%2?ZEBRA:null},
+        {text:String(a.level), align:'center', size:15, b:true, color:SEV_HEX[bucket(a.level)], fill:i%2?ZEBRA:null},
+        {text:num(a.count), align:'center', size:15, fill:i%2?ZEBRA:null}
+      ]}))
+    ]));
+    parts.push(empty());
+  }
+
+  /* sign-off */
+  parts.push(table([4870,4870], [
+    headRow(['Prepared by','Reviewed by']),
+    {cells:[{text:'\n'+model.preparedBy+'\nSOC L1 Analyst', align:'center', size:18, valign:'bottom'},
+            {text:'\n'+model.reviewedBy+'\nSOC L2 / Shift Lead', align:'center', size:18, valign:'bottom'}]}
+  ]));
+
+  function bucket(lvl){ return lvl<=3?'Low':lvl<=7?'Medium':lvl<=11?'High':'Critical'; }
+
+  const bodySect = '<w:sectPr><w:footerReference w:type="default" r:id="rId4"/>'+
+    '<w:pgSz w:w="'+PAGE_W+'" w:h="'+PAGE_H+'"/>'+
+    '<w:pgMar w:top="'+MY+'" w:right="'+MX+'" w:bottom="'+MY+'" w:left="'+MX+'" w:header="567" w:footer="567" w:gutter="0"/>'+
+    '<w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>';
+
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '+
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'+
+    '<w:body>'+parts.join('')+bodySect+'</w:body></w:document>';
+
+  /* ---- footer ---- */
+  const fldRun = (instr)=>'<w:r><w:fldChar w:fldCharType="begin"/></w:r>'+
+    '<w:r><w:instrText xml:space="preserve"> '+instr+' </w:instrText></w:r>'+
+    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'+
+    '<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="15"/></w:rPr><w:t>1</w:t></w:r>'+
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+  const footerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+    '<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="'+BORDER+'"/></w:pBdr>'+
+    '<w:spacing w:before="60" w:after="0"/><w:jc w:val="center"/></w:pPr>'+
+    run(esc(model.header.customer)+'  \u00B7  SOC L1 Daily Report  \u00B7  '+esc(model.header.reportDate)+'  \u00B7  CONFIDENTIAL  \u00B7  Page ',
+        {size:15, color:'6B7A8C'})+
+    fldRun('PAGE')+run(' of ',{size:15,color:'6B7A8C'})+fldRun('NUMPAGES')+
+    '</w:p></w:ftr>';
+
+  /* ---- styles ---- */
+  const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'+
+    '<w:docDefaults><w:rPrDefault><w:rPr>'+
+    '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/>'+
+    '<w:color w:val="'+TEXT+'"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:rPrDefault>'+
+    '<w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault>'+
+    '</w:docDefaults>'+
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>'+
+    '</w:styles>';
+
+  const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '+
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" '+
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'+
+    '<dc:title>SOC L1 Daily Operational Report — '+esc(model.header.customer)+'</dc:title>'+
+    '<dc:creator>'+esc(model.header.engineer)+'</dc:creator>'+
+    '<cp:lastModifiedBy>'+esc(model.header.engineer)+'</cp:lastModifiedBy>'+
+    '<cp:keywords>SOC, L1, daily report, '+esc(model.header.shift)+'</cp:keywords>'+
+    '</cp:coreProperties>';
+
+  const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" '+
+    'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'+
+    '<Application>SOC L1 Daily Report Builder</Application><Company>'+esc(model.header.customer)+'</Company>'+
+    '</Properties>';
+
+  const rels = ['<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
+                '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'];
+  if(cover) rels.push('<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/cover.'+cover.ext+'"/>');
+
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+    '<Default Extension="xml" ContentType="application/xml"/>'+
+    '<Default Extension="png" ContentType="image/png"/>'+
+    '<Default Extension="jpeg" ContentType="image/jpeg"/>'+
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'+
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'+
+    '<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'+
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'+
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'+
+    '</Types>';
+
+  const zip = new JSZipCtor();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.folder('_rels').file('.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'+
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'+
+    '</Relationships>');
+  zip.folder('docProps').file('core.xml', coreXml);
+  zip.folder('docProps').file('app.xml', appXml);
+  const word = zip.folder('word');
+  word.file('document.xml', documentXml);
+  word.file('styles.xml', stylesXml);
+  word.file('footer1.xml', footerXml);
+  word.folder('_rels').file('document.xml.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rels.join('')+'</Relationships>');
+  if(cover) word.folder('media').file('cover.'+cover.ext, cover.bytes);
+
+  return zip.generateAsync({
+    type: outputType || 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    compression: 'DEFLATE', compressionOptions:{level:6}
+  });
+}
+/*</docx-builder>*/
+
+/* ============================================================
+   Generate
+   ============================================================ */
+function dataUrlToBytes(dataUrl){
+  const b64 = dataUrl.split(',')[1];
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+/* File name: whatever the user typed, otherwise built from the header fields. */
+function autoFileName(){
+  const customer = $('customer').value.trim() || 'Heritage Minerals';
+  const stamp = fmtDateTime($('reportDate').value, '') || 'undated';
+  return (customer+'-SOC-L1-'+stamp+'-'+$('shift').value)
+    .replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+}
+function resolveFileName(){
+  let name = $('fileName').value.trim().replace(/\.docx$/i,'').trim();
+  if(!name) name = autoFileName();
+  name = name.replace(/[\\/:*?"<>|\u0000-\u001F]/g,'-')   // illegal on Windows
+             .replace(/\s+/g,' ').replace(/^[.\s-]+|[.\s-]+$/g,'').slice(0,120);
+  return (name || 'soc-l1-report') + '.docx';
+}
+function updateFilePreview(){ $('filePreview').textContent = resolveFileName(); }
+
+async function generate(){
+  const btn = $('btnGenerate');
+  try{
+    if(!$('engineer').value.trim()){ setMsg('Add the engineer name in section 02 before generating.','err'); $('engineer').focus(); return; }
+    if(!$('reportDate').value){ setMsg('Pick a report date in section 02.','err'); $('reportDate').focus(); return; }
+    btn.disabled = true; $('prog').classList.add('on'); setMsg('Assembling the document…','');
+    const model = collectModel();
+    const cover = state.cover ? {bytes: dataUrlToBytes(state.cover.dataUrl), ext: state.cover.type,
+                                 w: state.cover.w, h: state.cover.h} : null;
+    const blob = await buildDocx(model, cover, JSZip, 'blob');
+    const safe = resolveFileName();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = safe;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    setMsg('Report downloaded as ' + safe,'ok');
+  }catch(err){
+    console.error(err);
+    setMsg('Generation failed: ' + err.message,'err');
+  }finally{
+    btn.disabled = false; $('prog').classList.remove('on');
+  }
+}
+
+/* ============================================================
+   Drafts
+   ============================================================ */
+const DRAFT_KEY = 'soc-l1-report-draft';
+const COVER_KEY = 'soc-l1-report-cover';
+const hasStore = ()=> typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
+
+function snapshot(){
+  const o = {fields:{}, monitor:readRows('monitor',MONITOR_FIELDS), tasks:readRows('task',TASK_FIELDS), incidents:readRows('incident',INCIDENT_FIELDS)};
+  ['fileName','customer','reportDate','reportTime','shift','shiftTime','engineer','location','reportStatus','reportingPeriod',
+   'narrative','overallStatus','alertsReviewed','alertsEscalated','escalatedL2','totalTask','taskCompleted',
+   'topN','descWidth','notableLevel','issues','recs','preparedBy','reviewedBy'].forEach(id=>o.fields[id]=$(id).value);
+  ['incStats','incLevels','incNotable','incAppendix'].forEach(id=>o.fields[id]=$(id).checked);
+  return o;
+}
+function restore(o){
+  if(!o||!o.fields) return;
+  Object.entries(o.fields).forEach(([id,v])=>{
+    const el = $(id); if(!el) return;
+    if(el.type === 'checkbox') el.checked = !!v; else el.value = v;
+  });
+  ['monitor','task','incident'].forEach(kind=>{
+    const host = $('rows'+kind[0].toUpperCase()+kind.slice(1));
+    host.innerHTML=''; renumber(kind);
+  });
+  (o.monitor||[]).forEach(d=>addRow('monitor',d));
+  (o.tasks||[]).forEach(d=>addRow('task',d));
+  (o.incidents||[]).forEach(d=>addRow('incident',d));
+  renderBoard(); updateFilePreview();
+}
+async function saveDraft(){
+  const data = snapshot();
+  if(hasStore()){
+    try{ await window.storage.set(DRAFT_KEY, JSON.stringify(data)); setMsg('Draft saved. It will load again next time.','ok'); return; }
+    catch(e){ /* fall through to file */ }
+  }
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'soc-l1-draft.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setMsg('Draft downloaded as soc-l1-draft.json — load it back with the Load draft button.','ok');
+}
+async function loadDraft(){
+  if(hasStore()){
+    try{
+      const r = await window.storage.get(DRAFT_KEY);
+      if(r && r.value){ restore(JSON.parse(r.value)); setMsg('Draft restored.','ok'); return; }
+    }catch(e){ /* fall through to file */ }
+  }
+  const input = document.createElement('input');
+  input.type='file'; input.accept='application/json,.json';
+  input.onchange = async ()=>{
+    if(!input.files[0]) return;
+    try{ restore(JSON.parse(await input.files[0].text())); setMsg('Draft restored from file.','ok'); }
+    catch(e){ setMsg('That draft file could not be read.','err'); }
+  };
+  input.click();
+}
+async function persistCover(){
+  if(!hasStore()) return;
+  try{
+    if(state.cover) await window.storage.set(COVER_KEY, JSON.stringify(state.cover));
+    else await window.storage.delete(COVER_KEY);
+  }catch(e){ /* storage is a nicety, not a requirement */ }
+}
+async function loadStoredCover(){
+  if(!hasStore()) return;
+  try{
+    const r = await window.storage.get(COVER_KEY);
+    if(r && r.value){ state.cover = JSON.parse(r.value); renderCover(); }
+  }catch(e){ /* no stored cover */ }
+}
+
+/* ============================================================
+   Wire-up
+   ============================================================ */
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+wireDrop('dropXlsx','fileXlsx', loadAlerts);
+wireDrop('dropCover','fileCover', loadCover);
+
+$('shift').addEventListener('change', e=>{
+  const t = SHIFT_TIMES[e.target.value]; if(t) $('shiftTime').value = t;
+});
+['fileName','customer','reportDate','shift'].forEach(id=>{
+  $(id).addEventListener('input', updateFilePreview);
+  $(id).addEventListener('change', updateFilePreview);
+});
+$('notableLevel').addEventListener('input', renderBoard);
+$('addMonitor').onclick  = ()=>addRow('monitor',{});
+$('addTask').onclick     = ()=>addRow('task',{});
+$('addIncident').onclick = ()=>addRow('incident',{});
+$('seedMonitor').onclick = seedMonitorRows;
+$('btnGenerate').onclick = generate;
+$('btnSave').onclick = saveDraft;
+$('btnLoad').onclick = loadDraft;
+$('fillEvents').onclick = ()=>{ if(state.stats){ $('alertsReviewed').value = state.stats.totalEvents; setMsg('Alerts reviewed set to the total event count.','ok'); } else setMsg('Load the alert export first.','err'); };
+$('fillRules').onclick  = ()=>{ if(state.stats){ $('alertsReviewed').value = state.stats.ruleCount; setMsg('Alerts reviewed set to the unique rule count.','ok'); } else setMsg('Load the alert export first.','err'); };
+$('fillTasks').onclick  = ()=>{
+  const rows = readRows('task', TASK_FIELDS);
+  $('totalTask').value = rows.length;
+  $('taskCompleted').value = rows.filter(r=>r.status==='Completed').length;
+  setMsg('Task counts taken from section 06.','ok');
+};
+
+/* defaults */
+(function init(){
+  const now = new Date();
+  $('reportDate').value = now.toISOString().slice(0,10);
+  $('reportTime').value = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  ['monitor','task','incident'].forEach(renumber);
+  updateFilePreview();
+  loadStoredCover();
+})();
+</script>
+</body>
+</html>
