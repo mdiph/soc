@@ -61,9 +61,23 @@
   }
   function addDays(s, n) { var d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return ymd(d); }
 
+  /* Accepts "06:00", an ISO timestamp, or anything Date can parse, and
+     returns [hours, minutes]. Guards against Sheets turning times into dates. */
+  function hmParts(v) {
+    if (v == null) return [0, 0];
+    var str = String(v);
+    var m = str.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return [+m[1], +m[2]];
+    m = str.match(/T(\d{2}):(\d{2})/);
+    if (m) return [+m[1], +m[2]];
+    var d = new Date(str);
+    if (!isNaN(d.getTime())) return [d.getUTCHours(), d.getUTCMinutes()];
+    return [0, 0];
+  }
+
   function shiftWindow(shift, at) {
     var ref = new Date(at);
-    var sp = shift.start.split(':').map(Number), ep = shift.end.split(':').map(Number);
+    var sp = hmParts(shift.start), ep = hmParts(shift.end);
     var start = new Date(ref); start.setHours(sp[0], sp[1], 0, 0);
     var wraps = (ep[0] * 60 + ep[1]) <= (sp[0] * 60 + sp[1]);
     if (wraps && ref.getHours() < 12) start.setDate(start.getDate() - 1);
@@ -153,7 +167,14 @@
 
   async function enterApp() {
     var b = await window.API.call('bootstrap', {});
-    S.user = b.user; S.shifts = b.shifts || []; S.users = b.users || [];
+    S.user = b.user;
+    S.shifts = (b.shifts || []).map(function (s) {
+      var a = hmParts(s.start), z = hmParts(s.end);
+      s.start = pad(a[0]) + ':' + pad(a[1]);
+      s.end = pad(z[0]) + ':' + pad(z[1]);
+      return s;
+    });
+    S.users = b.users || [];
     S.open = b.openRecord; S.pending = b.pendingAbsence || 0;
     S.boardDate = ymd(new Date());
 
@@ -237,8 +258,13 @@
     $$('#railNav [data-go]').forEach(function (b) { b.classList.toggle('is-on', b.dataset.go === page); });
     $('#pageTitle').textContent = m.title;
     $('#pageSub').textContent = m.sub;
-    ({ board: renderBoard, checkin: renderCheckin, mylog: renderMyLog, absence: renderAbsence,
-       team: renderTeam, approvals: renderApprovals, roster: renderRoster, audit: renderAudit }[page] || function () {})();
+    var render = { board: renderBoard, checkin: renderCheckin, mylog: renderMyLog, absence: renderAbsence,
+       team: renderTeam, approvals: renderApprovals, roster: renderRoster, audit: renderAudit }[page];
+    if (!render) return;
+    try {
+      var out = render();
+      if (out && out.catch) out.catch(function (e) { toast('Could not load this page: ' + e.message, 'bad'); });
+    } catch (e) { toast('Could not load this page: ' + e.message, 'bad'); }
   }
 
   function fillShiftSelects() {
@@ -329,7 +355,7 @@
   function drawPlan(rows, D) {
     var segs = [];
     S.shifts.forEach(function (s) {
-      var sp = s.start.split(':').map(Number), ep = s.end.split(':').map(Number);
+      var sp = hmParts(s.start), ep = hmParts(s.end);
       var a = sp[0] + sp[1] / 60, b = ep[0] + ep[1] / 60;
       if (b > a) segs.push({ s: s, from: a, to: b, date: D });
       else { segs.push({ s: s, from: a, to: 24, date: D }); segs.push({ s: s, from: 0, to: b, date: addDays(D, -1) }); }
@@ -782,7 +808,7 @@
 
   function renderShifts() {
     $('#shiftTable').innerHTML = table(SHIFT_COLS, S.shifts, function (s) {
-      var sp = s.start.split(':').map(Number), ep = s.end.split(':').map(Number);
+      var sp = hmParts(s.start), ep = hmParts(s.end);
       var len = ((ep[0] * 60 + ep[1]) - (sp[0] * 60 + sp[1]) + 1440) % 1440 || 1440;
       return '<td><strong>' + esc(s.name) + '</strong></td>' +
         '<td class="num">' + esc(s.start) + ' – ' + esc(s.end) + (ep[0] * 60 + ep[1] <= sp[0] * 60 + sp[1] ? ' <span class="pill mute">+1d</span>' : '') + '</td>' +
