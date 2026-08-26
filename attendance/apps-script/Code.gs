@@ -2,7 +2,7 @@
     Shift Desk — Google Apps Script backend
     ------------------------------------------------------------
     Bound to a Google Sheet. Handles authentication, role checks,
-    attendance and absence records, and photo storage in Drive.
+    attendance records, and photo storage in Drive.
 
     First-time setup:
       1. Run setup() once from the editor and grant permissions.
@@ -15,15 +15,17 @@
 
 var SESSION_HOURS   = 8;
 var PHOTO_FOLDER    = 'Shift Desk Photos';
+var MAX_LOGIN_ATTEMPTS  = 5;   // wrong passwords in a row before the account locks
+var LOGIN_LOCKOUT_MINUTES = 15; // how long a lockout lasts
 var SHEETS = {
-  users:      ['user_id','full_name','username','password_hash','salt','role','employee_id','email','default_shift','status','created_at'],
+  users:      ['user_id','full_name','username','password_hash','salt','role','employee_id','email','default_shift','status','created_at','failed_logins','locked_until'],
   shifts:     ['shift_id','name','start','end','grace_min','min_engineers','active'],
-  attendance: ['record_id','user_id','employee_id','full_name','shift_id','shift_name','date','check_in','scheduled_end','check_out','duration_min','late_min','early_min','status','workstation','opening_activity','handover','alerts_triaged','incidents','photo_in','photo_out','created_at','updated_at'],
-  absence:    ['absence_id','user_id','full_name','type','date_from','date_to','days','shift_id','cover','reason','status','reviewed_by','reviewed_at','created_at'],
+  attendance: ['record_id','user_id','employee_id','full_name','shift_id','shift_name','date','check_in','scheduled_end','check_out','duration_min','late_min','early_min','status','workstation','opening_activity','handover','alerts_triaged','incidents','photo_in','photo_out','created_at','updated_at','issues_resolved'],
   sessions:   ['token','user_id','expires_at','created_at'],
-  audit:      ['timestamp','actor','action','detail']
+  audit:      ['timestamp','actor','action','detail'],
+  activity:   ['activity_id','record_id','user_id','full_name','ts','type','note','severity','reference']
 };
-var TITLES = { users:'Users', shifts:'Shifts', attendance:'Attendance', absence:'Absence', sessions:'Sessions', audit:'AuditLog' };
+var TITLES = { users:'Users', shifts:'Shifts', attendance:'Attendance', sessions:'Sessions', audit:'AuditLog', activity:'ActivityLog' };
 var RANK = { engineer:1, lead:2, admin:3 };
 
 /* ================= setup ================= */
@@ -125,7 +127,22 @@ function readAll(key) {
 }
 
 function cell(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  if (v instanceof Date) {
+    // Columns like "date" hold a plain calendar day ("2026-08-26"), but Sheets
+    // sometimes stores a value typed or pasted in as an actual Date regardless
+    // of the column's Plain Text format (the format only governs how new
+    // values are interpreted going forward, not ones already stored as a
+    // date). A calendar day read back this way always lands on local
+    // midnight, whereas a real timestamp column (check_in, created_at…)
+    // essentially never does — so that's the signal used to tell them apart.
+    // Format each accordingly instead of jamming a fake "Z" onto what is
+    // really just a date, which produced "Invalid Date" wherever the app
+    // expected a plain "yyyy-MM-dd" string (e.g. My Log's Date column).
+    var isMidnight = v.getHours() === 0 && v.getMinutes() === 0 && v.getSeconds() === 0 && v.getMilliseconds() === 0;
+    return isMidnight
+      ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  }
   return v === null || v === undefined ? '' : v;
 }
 
@@ -158,6 +175,16 @@ function audit(actor, action, detail) {
 
 function needRole(me, role) {
   if (RANK[me.role] < RANK[role]) throw new Error('Your role does not allow that.');
+}
+
+function registerFailedLogin(u) {
+  var fails = (Number(u.failed_logins) || 0) + 1;
+  var patch = { failed_logins: fails };
+  if (fails >= MAX_LOGIN_ATTEMPTS) {
+    patch.locked_until = new Date(Date.now() + LOGIN_LOCKOUT_MINUTES * 60000).toISOString();
+    audit(u.username, 'account locked', fails + ' failed attempts in a row, locked ' + LOGIN_LOCKOUT_MINUTES + 'm');
+  }
+  updateRow('users', u._row, patch);
 }
 
 function ymd(d) { return Utilities.formatDate(new Date(d), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
@@ -213,16 +240,14 @@ function pubAtt(a) {
     lateMin: Number(a.late_min) || 0, earlyMin: Number(a.early_min) || 0,
     status: a.status, station: a.workstation, activity: a.opening_activity,
     handover: a.handover, alerts: a.alerts_triaged, incidents: a.incidents,
-    photoIn: a.photo_in, photoOut: a.photo_out
+    resolved: a.issues_resolved, photoIn: a.photo_in, photoOut: a.photo_out
   };
 }
 
-function pubAbs(a) {
+function pubActivity(a) {
   return {
-    id: a.absence_id, userId: a.user_id, name: a.full_name, type: a.type,
-    from: a.date_from, to: a.date_to, days: Number(a.days) || 0,
-    shiftId: a.shift_id, cover: a.cover, reason: a.reason, status: a.status,
-    reviewedBy: a.reviewed_by, reviewedAt: a.reviewed_at, createdAt: a.created_at
+    id: a.activity_id, recordId: a.record_id, userId: a.user_id, name: a.full_name, ts: a.ts,
+    type: a.type, note: a.note, severity: a.severity || '', reference: a.reference || ''
   };
 }
 
@@ -238,7 +263,12 @@ function savePhoto(dataUrl, label) {
     var blob = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, label + '.jpg');
     var file = folder.createFile(blob);
     try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) { /* domain policy may block */ }
-    return 'https://drive.google.com/uc?export=view&id=' + file.getId();
+    // "uc?export=view" is what most tutorials show, but Google now blocks it from
+    // rendering inside an <img> tag for most files (it comes back as a broken image,
+    // which is why the app was falling back to showing the alt text "Attendance photo").
+    // The /thumbnail endpoint is the one Google still serves as raw image bytes to an
+    // anonymous request for a link-shared file.
+    return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000';
   } catch (e) {
     return '';
   }
@@ -252,10 +282,24 @@ var HANDLERS = {
     var u = readAll('users').filter(function (x) {
       return String(x.username).toLowerCase() === String(p.username || '').toLowerCase();
     })[0];
+
+    // Checked before the password so a correct guess during a lockout still
+    // doesn't get in — otherwise the lockout would only ever stop the wrong
+    // password, not an attacker who eventually finds the right one.
+    if (u && u.locked_until && new Date(u.locked_until) > new Date()) {
+      var mins = Math.max(1, Math.ceil((new Date(u.locked_until) - new Date()) / 60000));
+      throw new Error('Too many failed attempts. Try again in ' + mins + ' minute' + (mins === 1 ? '' : 's') + '.');
+    }
+
     if (!u || hash(p.password || '', u.salt) !== u.password_hash) {
+      if (u) registerFailedLogin(u);
       throw new Error('Username or password is not recognised.');
     }
     if (u.status !== 'active') throw new Error('This account is disabled. Ask your SOC administrator.');
+
+    if ((Number(u.failed_logins) || 0) > 0 || u.locked_until) {
+      updateRow('users', u._row, { failed_logins: 0, locked_until: '' });
+    }
 
     var token = Utilities.getUuid();
     appendRow('sessions', {
@@ -276,16 +320,11 @@ var HANDLERS = {
 
   bootstrap: function (p, me) {
     var mine = readAll('attendance').filter(function (a) { return a.user_id === me.user_id && !a.check_out; });
-    var pending = 0;
-    if (RANK[me.role] >= RANK.lead) {
-      pending = readAll('absence').filter(function (a) { return a.status === 'Pending'; }).length;
-    }
     return {
       user: pubUser(me),
       shifts: readAll('shifts').map(pubShift).filter(function (s) { return s.active; }),
       users: RANK[me.role] >= RANK.lead ? readAll('users').map(pubUser) : [pubUser(me)],
-      openRecord: mine.length ? pubAtt(mine[mine.length - 1]) : null,
-      pendingAbsence: pending
+      openRecord: mine.length ? pubAtt(mine[mine.length - 1]) : null
     };
   },
 
@@ -335,6 +374,7 @@ var HANDLERS = {
       early_min: early > 0 ? early : 0, status: status,
       handover: p.handover || '', alerts_triaged: p.alerts != null ? p.alerts : '',
       incidents: p.incidents != null ? p.incidents : '',
+      issues_resolved: p.resolved != null ? p.resolved : '',
       updated_at: co.toISOString()
     };
     if (p.photo) patch.photo_out = savePhoto(p.photo, 'out_' + me.username + '_' + rec.date);
@@ -344,6 +384,40 @@ var HANDLERS = {
 
     Object.keys(patch).forEach(function (k) { rec[k] = patch[k]; });
     return { record: pubAtt(rec) };
+  },
+
+  /* A running log an engineer can add to at any point during an open shift —
+     an alert worth a second look, a case raised, an issue resolved, or just
+     a note — instead of only writing everything up at sign-off. */
+  addActivityUpdate: function (p, me) {
+    var rec = readAll('attendance').filter(function (a) { return a.record_id === p.recordId; })[0];
+    if (!rec) throw new Error('That shift record was not found.');
+    if (rec.user_id !== me.user_id && RANK[me.role] < RANK.admin) throw new Error('You can only log activity on your own shift.');
+    if (rec.check_out) throw new Error('That shift is already signed off.');
+
+    var type = ['Note', 'Alert', 'Case', 'Resolved'].indexOf(p.type) >= 0 ? p.type : 'Note';
+    var note = String(p.note || '').trim();
+    if (!note) throw new Error('Write something before logging it.');
+    var severity = ['Low', 'Medium', 'High', 'Critical'].indexOf(p.severity) >= 0 ? p.severity : '';
+    var reference = String(p.reference || '').trim().slice(0, 40);
+
+    var entry = {
+      activity_id: uid('act'), record_id: p.recordId, user_id: me.user_id, full_name: me.full_name,
+      ts: new Date().toISOString(), type: type, note: note, severity: severity, reference: reference
+    };
+    appendRow('activity', entry);
+    audit(me.username, 'activity logged', type + ' · ' + note.slice(0, 80));
+    return { record: pubActivity(entry) };
+  },
+
+  listActivityUpdates: function (p, me) {
+    var rec = readAll('attendance').filter(function (a) { return a.record_id === p.recordId; })[0];
+    if (!rec) throw new Error('That shift record was not found.');
+    if (rec.user_id !== me.user_id && RANK[me.role] < RANK.lead) throw new Error('Your role does not allow that.');
+    var rows = readAll('activity').filter(function (a) { return a.record_id === p.recordId; })
+      .map(pubActivity)
+      .sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
+    return { rows: rows };
   },
 
   /* Everyone can see who is covering the floor. Engineers get names and
@@ -362,12 +436,7 @@ var HANDLERS = {
         activity: '', handover: '', photoIn: '', photoOut: ''
       };
     });
-    var abs = readAll('absence').filter(function (a) { return a.status === 'Approved'; }).map(function (a) {
-      var o = pubAbs(a);
-      if (!full && o.userId !== me.user_id) o.reason = '';
-      return o;
-    });
-    return { rows: rows, absence: abs };
+    return { rows: rows };
   },
 
   listAttendance: function (p, me) {
@@ -393,40 +462,6 @@ var HANDLERS = {
     return { ok: true };
   },
 
-  createAbsence: function (p, me) {
-    var from = new Date(p.from), to = new Date(p.to);
-    if (to < from) throw new Error('The last day cannot fall before the first day.');
-    var rec = {
-      absence_id: uid('abs'), user_id: me.user_id, full_name: me.full_name, type: p.type,
-      date_from: p.from, date_to: p.to, days: Math.round((to - from) / 864e5) + 1,
-      shift_id: p.shiftId || '', cover: p.cover || '', reason: p.reason || '',
-      status: 'Pending', reviewed_by: '', reviewed_at: '', created_at: new Date().toISOString()
-    };
-    appendRow('absence', rec);
-    audit(me.username, 'absence filed', p.type + ' ' + p.from + '→' + p.to);
-    return { record: pubAbs(rec) };
-  },
-
-  listAbsence: function (p, me) {
-    var rows = readAll('absence');
-    if (RANK[me.role] < RANK.lead || p.mine) {
-      rows = rows.filter(function (a) { return a.user_id === me.user_id; });
-    }
-    rows = rows.map(pubAbs).sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-    return { rows: rows };
-  },
-
-  reviewAbsence: function (p, me) {
-    needRole(me, 'lead');
-    var rec = readAll('absence').filter(function (a) { return a.absence_id === p.id; })[0];
-    if (!rec) throw new Error('That absence request was not found.');
-    if (['Approved', 'Rejected'].indexOf(p.decision) < 0) throw new Error('Decision must be Approved or Rejected.');
-    updateRow('absence', rec._row, { status: p.decision, reviewed_by: me.full_name, reviewed_at: new Date().toISOString() });
-    audit(me.username, 'absence ' + p.decision.toLowerCase(), rec.full_name + ' · ' + rec.date_from);
-    rec.status = p.decision; rec.reviewed_by = me.full_name;
-    return { record: pubAbs(rec) };
-  },
-
   listUsers: function (p, me) {
     needRole(me, 'lead');
     return { rows: readAll('users').map(pubUser) };
@@ -446,7 +481,12 @@ var HANDLERS = {
         full_name: p.name, username: p.username, role: p.role, employee_id: p.empId || '',
         email: p.email || '', default_shift: p.defaultShift || '', status: p.status || 'active'
       };
-      if (p.password) { patch.salt = uid('s'); patch.password_hash = hash(p.password, patch.salt); }
+      if (p.password) {
+        patch.salt = uid('s'); patch.password_hash = hash(p.password, patch.salt);
+        // A fresh password from an admin should work immediately, not sit
+        // behind a lockout the old password earned.
+        patch.failed_logins = 0; patch.locked_until = '';
+      }
       updateRow('users', existing._row, patch);
       audit(me.username, 'user updated', p.username);
       Object.keys(patch).forEach(function (k) { existing[k] = patch[k]; });

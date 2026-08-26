@@ -11,8 +11,8 @@
 
   var S = {
     user: null, shifts: [], users: [], open: null,
-    page: 'board', boardDate: null, photo: null, pending: 0,
-    teamRows: [], absRows: []
+    page: 'board', boardDate: null, photo: null,
+    teamRows: [], myRows: []
   };
 
   var RANK = { engineer: 1, lead: 2, admin: 3 };
@@ -22,12 +22,10 @@
     { group: 'Watch floor', items: [
       { id: 'board',     label: 'Live board',     min: 'engineer', title: 'Live board',     sub: 'Who is on the floor and where the gaps are.' },
       { id: 'checkin',   label: 'Shift check-in', min: 'engineer', title: 'Shift check-in', sub: 'Sign on when you take the desk, sign off when you hand over.' },
-      { id: 'mylog',     label: 'My log',         min: 'engineer', title: 'My log',         sub: 'Your own attendance history.' },
-      { id: 'absence',   label: 'Absence',        min: 'engineer', title: 'Absence',        sub: 'File and track time away from the rota.' }
+      { id: 'mylog',     label: 'My log',         min: 'engineer', title: 'My log',         sub: 'Your own attendance history.' }
     ]},
     { group: 'Supervision', items: [
-      { id: 'team',      label: 'Team log',       min: 'lead', title: 'Team log',            sub: 'All attendance across the roster, filterable and exportable.' },
-      { id: 'approvals', label: 'Approvals',      min: 'lead', badge: true, title: 'Approvals', sub: 'Absence requests waiting on a decision.' }
+      { id: 'team',      label: 'Team log',       min: 'lead', title: 'Team log',            sub: 'All attendance across the roster, filterable and exportable.' }
     ]},
     { group: 'Administration', items: [
       { id: 'roster',    label: 'Roster & shifts', min: 'admin', title: 'Roster & shifts', sub: 'Accounts, roles and the shift pattern.' },
@@ -48,7 +46,13 @@
   function hms(d) { d = new Date(d); return hm(d) + ':' + pad(d.getSeconds()); }
   function localInput(d) { d = new Date(d); return ymd(d) + 'T' + hm(d); }
   function dayLabel(s) {
-    var d = new Date(s + 'T00:00:00');
+    // Accepts a plain "2026-08-26" or, defensively, a full timestamp that
+    // shouldn't be here — pull just the calendar-day prefix either way so a
+    // malformed value never renders as the literal text "Invalid Date".
+    var m = String(s == null ? '' : s).match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!m) return '—';
+    var d = new Date(m[1] + 'T00:00:00');
+    if (isNaN(d.getTime())) return '—';
     return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
   }
   function dur(min) {
@@ -118,21 +122,29 @@
     if (row.status === 'Early out') return '<span class="pill warn">Early out</span>';
     return '<span class="pill ok">On time</span>';
   }
-  function absPill(s) {
-    return '<span class="pill ' + (s === 'Approved' ? 'ok' : s === 'Rejected' ? 'bad' : 'warn') + '">' + esc(s) + '</span>';
-  }
   function thumb(src, alt) {
     return src
-      ? '<img class="thumb" src="' + esc(src) + '" alt="' + esc(alt) + '" data-zoom="' + esc(src) + '">'
+      ? '<img class="thumb" src="' + esc(src) + '" alt="' + esc(alt) + '" data-zoom="' + esc(src) + '" onerror="window.imgFail(this)">'
       : '<span class="no-thumb" title="No photo">–</span>';
   }
+
+  // A Drive link can stop resolving (sharing revoked, file moved) long after
+  // the record was written. Rather than a silent broken-image icon plus
+  // stray alt text, swap it for an explicit placeholder.
+  window.imgFail = function (img) {
+    var cls = img.classList.contains('card-av') ? 'card-av' : 'no-thumb';
+    img.outerHTML = '<span class="' + cls + '" title="Photo failed to load">' + (img.dataset.fallback || '!') + '</span>';
+  };
+  window.imgFailBox = function (img) {
+    img.replaceWith(Object.assign(document.createElement('p'), { className: 'lightbox-fail', textContent: 'Photo failed to load.' }));
+  };
 
   document.addEventListener('click', function (e) {
     var z = e.target.closest('[data-zoom]');
     if (z) {
       var box = document.createElement('div');
       box.className = 'lightbox';
-      box.innerHTML = '<img src="' + esc(z.dataset.zoom) + '" alt="Attendance photo">';
+      box.innerHTML = '<img src="' + esc(z.dataset.zoom) + '" alt="Attendance photo" onerror="window.imgFailBox(this)">';
       box.addEventListener('click', function () { box.remove(); });
       document.body.appendChild(box);
     }
@@ -178,7 +190,7 @@
       return s;
     });
     S.users = b.users || [];
-    S.open = b.openRecord; S.pending = b.pendingAbsence || 0;
+    S.open = b.openRecord;
     S.boardDate = ymd(new Date());
 
     stage = 'show app';
@@ -236,22 +248,13 @@
       if (!items.length) return;
       html += '<div class="nav-group">' + esc(g.group) + '</div>';
       items.forEach(function (i) {
-        html += '<button class="nav-item" type="button" data-go="' + i.id + '"><span>' + esc(i.label) + '</span>' +
-          (i.badge ? '<span class="nav-badge" data-badge hidden>0</span>' : '') + '</button>';
+        html += '<button class="nav-item" type="button" data-go="' + i.id + '"><span>' + esc(i.label) + '</span></button>';
       });
     });
     $('#railNav').innerHTML = html;
     $$('#railNav [data-go]').forEach(function (b) {
       b.addEventListener('click', function () { go(b.dataset.go); });
     });
-    paintBadge();
-  }
-
-  function paintBadge() {
-    var b = $('#railNav [data-badge]');
-    if (!b) return;
-    b.hidden = !S.pending;
-    b.textContent = S.pending;
   }
 
   function meta(id) {
@@ -268,8 +271,8 @@
     $$('#railNav [data-go]').forEach(function (b) { b.classList.toggle('is-on', b.dataset.go === page); });
     $('#pageTitle').textContent = m.title;
     $('#pageSub').textContent = m.sub;
-    var render = { board: renderBoard, checkin: renderCheckin, mylog: renderMyLog, absence: renderAbsence,
-       team: renderTeam, approvals: renderApprovals, roster: renderRoster, audit: renderAudit }[page];
+    var render = { board: renderBoard, checkin: renderCheckin, mylog: renderMyLog,
+       team: renderTeam, roster: renderRoster, audit: renderAudit }[page];
     if (!render) return;
     try {
       var out = render();
@@ -282,7 +285,6 @@
       return '<option value="' + esc(s.id) + '">' + esc(s.name) + ' · ' + esc(s.start) + '–' + esc(s.end) + '</option>';
     }).join('');
     $('#ciShift').innerHTML = opts;
-    $('#absShift').innerHTML = '<option value="">Any / all shifts</option>' + opts;
     $('#uShift').innerHTML = '<option value="">None</option>' + opts;
     $('#fShift').innerHTML = '<option value="">All shifts</option>' + opts;
     $('#fUser').innerHTML = '<option value="">All engineers</option>' + S.users.map(function (u) {
@@ -303,7 +305,6 @@
     var D = S.boardDate;
     var res = await window.API.call('boardData', { from: addDays(D, -1), to: addDays(D, 1) });
     var rows = res.rows;
-    var absences = res.absence.filter(function (a) { return a.from <= D && a.to >= D; });
 
     drawAxis();
     var gapHours = drawPlan(rows, D);
@@ -317,8 +318,7 @@
       stat(open.length, 'On the floor', 'live'),
       stat(today.length, 'Signed on ' + dayLabel(D)),
       stat(late.length, 'Late arrivals', late.length ? 'warn' : ''),
-      stat(gapHours.toFixed(1) + 'h', 'Uncovered', gapHours > 0 ? 'alarm' : 'live'),
-      stat(absences.length, 'Authorised absent', absences.length ? 'warn' : '')
+      stat(gapHours.toFixed(1) + 'h', 'Uncovered', gapHours > 0 ? 'alarm' : 'live')
     ].join('');
 
     $('#onFloor').innerHTML = open.length ? open.map(function (r) {
@@ -336,10 +336,7 @@
     today.filter(function (r) { return r.status === 'Early out'; }).forEach(function (r) {
       ex.push(card(r.photoOut || r.photoIn, r.name, '<span class="pill warn">Early out</span>', r.shiftName + ' · signed off <span class="mono">' + hm(r.checkOut) + '</span>', r.handover));
     });
-    absences.forEach(function (a) {
-      ex.push(card('', a.name, '<span class="pill mute">' + esc(a.type) + '</span>', 'Authorised absence · ' + dayLabel(a.from) + ' → ' + dayLabel(a.to) + (a.cover ? ' · covered by ' + esc(a.cover) : ' · no cover named'), a.reason));
-    });
-    $('#exceptions').innerHTML = ex.length ? ex.join('') : '<p class="empty">Clean day. No late arrivals, early departures or absences.</p>';
+    $('#exceptions').innerHTML = ex.length ? ex.join('') : '<p class="empty">Clean day. No late arrivals or early departures.</p>';
   }
 
   function stat(n, l, k) {
@@ -347,7 +344,7 @@
   }
   function card(photo, name, pill, meta, note) {
     return '<div class="card">' +
-      (photo ? '<img class="card-av" src="' + esc(photo) + '" alt="" data-zoom="' + esc(photo) + '">'
+      (photo ? '<img class="card-av" src="' + esc(photo) + '" alt="" data-zoom="' + esc(photo) + '" data-fallback="' + esc(initials(name)) + '" onerror="window.imgFail(this)">'
              : '<span class="card-av">' + esc(initials(name)) + '</span>') +
       '<div class="card-body"><div class="card-title"><strong>' + esc(name) + '</strong>' + (pill || '') + '</div>' +
       '<div class="card-meta">' + meta + '</div>' +
@@ -471,6 +468,10 @@
     img.onload = function () { setShot(downscale(img, img.naturalWidth, img.naturalHeight)); };
     img.src = URL.createObjectURL(f);
   });
+  $('#camAddOut').addEventListener('click', function () {
+    $('#camSummary').hidden = true;
+    $('#camCapture').hidden = false;
+  });
 
   /* ================= check in / out ================= */
 
@@ -478,9 +479,20 @@
     $('#ciName').value = S.user.name;
     $('#ciNew').hidden = !!S.open;
     $('#ciOpen').hidden = !S.open;
+
+    // The camera only matters twice — the sign-on shot, and an optional
+    // sign-off shot. Once signed on, collapse it to a small summary of what
+    // was already captured so the shift-activity form gets the room instead;
+    // "Add sign-off photo" reveals the full capture UI again on demand.
+    camOff();
+    $('#camSummary').hidden = !S.open;
+    $('#camCapture').hidden = !!S.open;
+    if (S.open) $('#camSummaryPhoto').innerHTML = thumb(S.open.photoIn, 'Sign-on photo');
+
     if (S.open) {
       $('#ciOpenAt').textContent = hm(S.open.checkIn);
       $('#ciOpenShift').textContent = S.open.shiftName;
+      renderActivityLog();
     } else {
       // Default to whatever shift is running right now; fall back to the
       // engineer's usual one. Stops a 06:10 sign-on being filed against
@@ -545,6 +557,7 @@
         handover: $('#coHandover').value.trim(),
         alerts: +$('#coAlerts').value || 0,
         incidents: +$('#coIncidents').value || 0,
+        resolved: +$('#coResolved').value || 0,
         photo: S.photo || ''
       });
       toast('Shift signed off. ' + dur(out.record.durationMin) + ' on the desk.');
@@ -555,13 +568,67 @@
     finally { busy(btn, false); }
   });
 
+  /* ---- shift activity log: a running log the engineer can add to at any
+     point during an open shift, instead of writing everything up cold at
+     sign-off. Tallies of Alert/Case/Resolved entries pre-fill the sign-off
+     counters, which stay editable. ---- */
+
+  var ACT_LABEL = { Note: 'Note', Alert: 'Alert', Case: 'Case raised', Resolved: 'Resolved' };
+  var ACT_CLASS = { Note: 'mute', Alert: 'warn', Case: 'info', Resolved: 'ok' };
+  var SEV_CLASS = { Low: 'mute', Medium: 'warn', High: 'warn', Critical: 'bad' };
+
+  function activityItemHtml(r) {
+    var sev = r.severity ? ' <span class="pill ' + SEV_CLASS[r.severity] + '">' + esc(r.severity) + '</span>' : '';
+    var ref = r.reference ? ' <span class="activity-ref mono">' + esc(r.reference) + '</span>' : '';
+    return '<div class="activity-item"><span class="pill ' + ACT_CLASS[r.type] + '">' + esc(ACT_LABEL[r.type] || r.type) + '</span>' + sev +
+      '<span class="activity-note">' + esc(r.note) + ref + '</span>' +
+      '<span class="activity-time mono">' + esc(hm(r.ts)) + '</span></div>';
+  }
+
+  async function renderActivityLog() {
+    if (!S.open) return;
+    var list = $('#actList');
+    list.innerHTML = '<p class="empty">Loading…</p>';
+    try {
+      var res = await window.API.call('listActivityUpdates', { recordId: S.open.id });
+      var rows = res.rows || [];
+      list.innerHTML = rows.length ? rows.map(activityItemHtml).join('') : '<p class="empty">Nothing logged yet this shift.</p>';
+
+      var tally = { Alert: 0, Case: 0, Resolved: 0 };
+      rows.forEach(function (r) { if (tally[r.type] != null) tally[r.type]++; });
+      $('#coAlerts').value = tally.Alert;
+      $('#coIncidents').value = tally.Case;
+      $('#coResolved').value = tally.Resolved;
+    } catch (err) {
+      list.innerHTML = '<p class="empty">Could not load the activity log.</p>';
+    }
+  }
+
+  $('#actForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    showErr('#actError', '');
+    var note = $('#actNote').value.trim();
+    if (!note) { showErr('#actError', 'Write something before logging it.'); return; }
+    var btn = e.target.querySelector('button[type=submit]'); busy(btn, true, 'Logging…');
+    try {
+      await window.API.call('addActivityUpdate', {
+        recordId: S.open.id, type: $('#actType').value, note: note,
+        severity: $('#actSeverity').value, reference: $('#actReference').value.trim()
+      });
+      $('#actNote').value = ''; $('#actSeverity').value = ''; $('#actReference').value = '';
+      await renderActivityLog();
+    } catch (err) { showErr('#actError', err.message); }
+    finally { busy(btn, false); }
+  });
+
   /* ================= my log ================= */
 
-  var MY_COLS = ['Date', 'Shift', 'On', 'Off', 'Hours', 'Status', 'Photo', 'Handover'];
+  var MY_COLS = ['Date', 'Shift', 'On', 'Off', 'Hours', 'Status', 'Photo', 'Handover', ''];
 
   async function renderMyLog() {
     var res = await window.API.call('listAttendance', { mine: true });
     var rows = res.rows;
+    S.myRows = rows;
     var done = rows.filter(function (r) { return r.checkOut; });
     var mins = done.reduce(function (a, r) { return a + (+r.durationMin || 0); }, 0);
     var late = rows.filter(function (r) { return r.lateMin > 0; }).length;
@@ -577,80 +644,65 @@
         '<td class="num">' + (r.checkOut ? esc(hm(r.checkOut)) : '—') + '</td>' +
         '<td class="num">' + esc(dur(r.durationMin)) + '</td>' +
         '<td>' + statusPill(r) + '</td><td>' + thumb(r.photoIn, 'Sign-on photo') + '</td>' +
-        '<td>' + esc((r.handover || r.activity || '—').slice(0, 90)) + '</td>';
+        '<td>' + esc((r.handover || r.activity || '—').slice(0, 90)) + '</td>' +
+        '<td><button class="btn btn-ghost btn-sm" data-detail="' + esc(r.id) + '">Details</button></td>';
     }, 'You have not signed on to a shift yet.');
+
+    $$('#myTable [data-detail]').forEach(function (b) {
+      b.addEventListener('click', function () { showRecordDetail(rowById(S.myRows, b.dataset.detail)); });
+    });
+  }
+
+  function rowById(rows, id) { return (rows || []).filter(function (r) { return r.id === id; })[0] || null; }
+
+  /* ---- shift record detail modal: the team/my-log tables only have room
+     for a truncated line of handover text, so a Details button opens the
+     full picture — both photos, opening activity, handover, the counters,
+     and the full mid-shift activity log for that record. ---- */
+
+  async function showRecordDetail(row) {
+    if (!row) return;
+    var modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = '<div class="modal-box"><button class="modal-close" type="button" aria-label="Close">×</button><div class="modal-body"><p class="empty">Loading…</p></div></div>';
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.remove(); });
+    modal.querySelector('.modal-close').addEventListener('click', function () { modal.remove(); });
+    document.body.appendChild(modal);
+
+    var acts = [];
+    try { acts = (await window.API.call('listActivityUpdates', { recordId: row.id })).rows || []; }
+    catch (err) { /* older record predating the log, or view not permitted — just show what we have */ }
+
+    modal.querySelector('.modal-body').innerHTML = recordDetailHtml(row, acts);
+  }
+
+  function recordDetailHtml(r, acts) {
+    var photos = (r.photoIn ? '<div class="detail-photo">' + thumb(r.photoIn, 'Sign-on photo') + '<span>Sign-on</span></div>' : '') +
+      (r.photoOut ? '<div class="detail-photo">' + thumb(r.photoOut, 'Sign-off photo') + '<span>Sign-off</span></div>' : '');
+
+    var counters = [
+      stat(r.alerts === '' || r.alerts == null ? '—' : r.alerts, 'Alerts triaged'),
+      stat(r.incidents === '' || r.incidents == null ? '—' : r.incidents, 'Cases raised'),
+      stat(r.resolved === '' || r.resolved == null ? '—' : r.resolved, 'Issues resolved')
+    ].join('');
+
+    var log = acts.length ? acts.map(activityItemHtml).join('') : '<p class="empty">Nothing logged during this shift.</p>';
+
+    return '<div class="detail-head"><h3>' + esc(r.name) + '</h3>' + statusPill(r) +
+      '<p>' + esc(dayLabel(r.date)) + ' · ' + esc(r.shiftName) + ' shift · ' +
+      '<span class="mono">' + esc(hm(r.checkIn)) + '–' + (r.checkOut ? esc(hm(r.checkOut)) : 'now') + '</span>' +
+      (r.station ? ' · ' + esc(r.station) : '') + '</p></div>' +
+      (photos ? '<div class="detail-photos">' + photos + '</div>' : '') +
+      '<div class="stat-strip">' + counters + '</div>' +
+      (r.activity ? '<div class="detail-block"><h4>Opening activity</h4><p>' + esc(r.activity) + '</p></div>' : '') +
+      (r.handover ? '<div class="detail-block"><h4>Handover notes</h4><p>' + esc(r.handover) + '</p></div>' : '') +
+      '<div class="detail-block"><h4>Shift activity log</h4><div class="activity-list">' + log + '</div></div>';
   }
 
   function table(cols, rows, rowFn, emptyMsg) {
     if (!rows.length) return '<tbody><tr><td class="empty" colspan="' + cols.length + '">' + esc(emptyMsg) + '</td></tr></tbody>';
     return '<thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead>' +
       '<tbody>' + rows.map(function (r) { return '<tr>' + rowFn(r) + '</tr>'; }).join('') + '</tbody>';
-  }
-
-  /* ================= absence ================= */
-
-  $('#absFrom').addEventListener('change', function () {
-    if (!$('#absTo').value || $('#absTo').value < this.value) $('#absTo').value = this.value;
-  });
-
-  $('#absForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    showErr('#absError', '');
-    var btn = e.target.querySelector('button[type=submit]'); busy(btn, true, 'Filing…');
-    try {
-      await window.API.call('createAbsence', {
-        type: $('#absType').value, from: $('#absFrom').value, to: $('#absTo').value,
-        shiftId: $('#absShift').value, cover: $('#absCover').value.trim(), reason: $('#absReason').value.trim()
-      });
-      $('#absForm').reset();
-      toast('Absence filed. Your shift lead has been queued to review it.');
-      renderAbsence();
-    } catch (err) { showErr('#absError', err.message); }
-    finally { busy(btn, false); }
-  });
-
-  async function renderAbsence() {
-    if (!$('#absFrom').value) { $('#absFrom').value = ymd(new Date()); $('#absTo').value = ymd(new Date()); }
-    var res = await window.API.call('listAbsence', { mine: true });
-    $('#absMine').innerHTML = res.rows.length ? res.rows.map(function (a) {
-      return card('', a.name, absPill(a.status),
-        esc(a.type) + ' · ' + dayLabel(a.from) + ' → ' + dayLabel(a.to) + ' · <span class="mono">' + a.days + 'd</span>' +
-        (a.reviewedBy ? ' · reviewed by ' + esc(a.reviewedBy) : ''), a.reason);
-    }).join('') : '<p class="empty">You have not filed any absence.</p>';
-  }
-
-  /* ================= approvals ================= */
-
-  async function renderApprovals() {
-    var res = await window.API.call('listAbsence', {});
-    var rows = res.rows.sort(function (a, b) {
-      return (a.status === 'Pending' ? 0 : 1) - (b.status === 'Pending' ? 0 : 1);
-    });
-    S.pending = rows.filter(function (r) { return r.status === 'Pending'; }).length;
-    paintBadge();
-
-    $('#approvalList').innerHTML = rows.length ? rows.map(function (a) {
-      var actions = a.status === 'Pending'
-        ? '<div class="card-actions"><button class="btn btn-ghost btn-sm" data-approve="' + esc(a.id) + '">Approve</button>' +
-          '<button class="btn btn-danger btn-sm" data-reject="' + esc(a.id) + '">Reject</button></div>'
-        : '';
-      return '<div class="card"><span class="card-av">' + esc(initials(a.name)) + '</span>' +
-        '<div class="card-body"><div class="card-title"><strong>' + esc(a.name) + '</strong>' + absPill(a.status) +
-        '<span class="pill mute">' + esc(a.type) + '</span></div>' +
-        '<div class="card-meta">' + dayLabel(a.from) + ' → ' + dayLabel(a.to) + ' · <span class="mono">' + a.days + 'd</span>' +
-        (a.cover ? ' · cover: ' + esc(a.cover) : ' · <span class="pill bad">no cover</span>') + '</div>' +
-        '<div class="card-note">' + esc(a.reason) + '</div></div>' + actions + '</div>';
-    }).join('') : '<p class="empty">No absence requests on file.</p>';
-
-    $$('#approvalList [data-approve],#approvalList [data-reject]').forEach(function (b) {
-      b.addEventListener('click', async function () {
-        var id = b.dataset.approve || b.dataset.reject;
-        var decision = b.dataset.approve ? 'Approved' : 'Rejected';
-        busy(b, true, '…');
-        try { await window.API.call('reviewAbsence', { id: id, decision: decision }); toast('Absence ' + decision.toLowerCase() + '.'); renderApprovals(); }
-        catch (err) { toast(err.message, 'bad'); busy(b, false); }
-      });
-    });
   }
 
   /* ================= team log ================= */
@@ -679,9 +731,13 @@
         '<td class="num">' + esc(dur(r.durationMin)) + '</td>' +
         '<td>' + statusPill(r) + '</td><td>' + esc(r.station || '—') + '</td>' +
         '<td>' + esc((r.handover || r.activity || '—').slice(0, 70)) + '</td>' +
-        '<td>' + (can('admin') ? '<button class="btn btn-danger btn-sm" data-del="' + esc(r.id) + '">Delete</button>' : '') + '</td>';
+        '<td><button class="btn btn-ghost btn-sm" data-detail="' + esc(r.id) + '">Details</button> ' +
+        (can('admin') ? '<button class="btn btn-danger btn-sm" data-del="' + esc(r.id) + '">Delete</button>' : '') + '</td>';
     }, 'No shift records match those filters.');
 
+    $$('#teamTable [data-detail]').forEach(function (b) {
+      b.addEventListener('click', function () { showRecordDetail(rowById(S.teamRows, b.dataset.detail)); });
+    });
     $$('#teamTable [data-del]').forEach(function (b) {
       b.addEventListener('click', async function () {
         if (!confirm('Delete this shift record? The audit trail keeps a note of the deletion.')) return;
@@ -697,7 +753,6 @@
     var btn = this; busy(btn, true, 'Building…');
     try {
       var att = S.teamRows.length ? S.teamRows : (await window.API.call('listAttendance', {})).rows;
-      var abs = (await window.API.call('listAbsence', {})).rows;
 
       var attSheet = att.map(function (r) {
         return {
@@ -708,7 +763,8 @@
           'Scheduled end': r.scheduledEnd ? new Date(r.scheduledEnd).toLocaleString() : '',
           'Hours': r.durationMin ? +(r.durationMin / 60).toFixed(2) : '',
           'Late (min)': r.lateMin || 0, 'Status': r.status,
-          'Workstation': r.station || '', 'Alerts triaged': r.alerts, 'Incidents': r.incidents,
+          'Workstation': r.station || '', 'Alerts triaged': r.alerts, 'Cases raised': r.incidents,
+          'Issues resolved': r.resolved || 0,
           'Opening activity': r.activity || '', 'Handover': r.handover || '',
           'Photo on': r.photoIn && r.photoIn.indexOf('http') === 0 ? r.photoIn : (r.photoIn ? 'embedded' : ''),
           'Photo off': r.photoOut && r.photoOut.indexOf('http') === 0 ? r.photoOut : (r.photoOut ? 'embedded' : '')
@@ -717,11 +773,11 @@
 
       var byPerson = {};
       att.forEach(function (r) {
-        var p = byPerson[r.name] = byPerson[r.name] || { 'Engineer': r.name, 'Shifts': 0, 'Hours': 0, 'Late': 0, 'Early out': 0, 'Alerts': 0, 'Incidents': 0 };
+        var p = byPerson[r.name] = byPerson[r.name] || { 'Engineer': r.name, 'Shifts': 0, 'Hours': 0, 'Late': 0, 'Early out': 0, 'Alerts': 0, 'Cases raised': 0, 'Issues resolved': 0 };
         p.Shifts++; p.Hours += (+r.durationMin || 0) / 60;
         if (r.lateMin > 0) p.Late++;
         if (r.status === 'Early out') p['Early out']++;
-        p.Alerts += +r.alerts || 0; p.Incidents += +r.incidents || 0;
+        p.Alerts += +r.alerts || 0; p['Cases raised'] += +r.incidents || 0; p['Issues resolved'] += +r.resolved || 0;
       });
       var summary = Object.keys(byPerson).map(function (k) {
         var p = byPerson[k]; p.Hours = +p.Hours.toFixed(2);
@@ -732,9 +788,6 @@
       var wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary.length ? summary : [{}]), 'Summary');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attSheet.length ? attSheet : [{}]), 'Attendance');
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(abs.length ? abs.map(function (a) {
-        return { 'Engineer': a.name, 'Type': a.type, 'From': a.from, 'To': a.to, 'Days': a.days, 'Cover': a.cover || '', 'Reason': a.reason, 'Status': a.status, 'Reviewed by': a.reviewedBy || '' };
-      }) : [{}]), 'Absence');
       XLSX.writeFile(wb, 'soc-attendance-' + ymd(new Date()) + '.xlsx');
       toast('Spreadsheet downloaded.');
     } catch (err) { toast(err.message, 'bad'); }

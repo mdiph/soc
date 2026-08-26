@@ -93,20 +93,13 @@
       });
     });
 
-    var abs = [{
-      id: uid('abs'), userId: 'u-eng3', name: 'Arif Nugroho', type: 'Sick',
-      from: ymd(new Date(today.getTime() + 864e5)), to: ymd(new Date(today.getTime() + 864e5)),
-      days: 1, shiftId: 'sh-evening', cover: 'Rizky Maulana',
-      reason: 'Fever since last night, seen a doctor, certificate to follow.',
-      status: 'Pending', reviewedBy: '', reviewedAt: '', createdAt: iso(new Date())
-    }];
-
-    return { users: users, shifts: shifts, attendance: att, absence: abs, audit: [], sessions: {} };
+    return { users: users, shifts: shifts, attendance: att, activity: [], audit: [], sessions: {} };
   }
 
   function db() {
     var d = load();
     if (!d) { d = seed(); save(d); }
+    if (!d.activity) d.activity = []; // older saved demo DBs predate the activity log
     return d;
   }
 
@@ -152,9 +145,7 @@
         user: pub(me),
         shifts: d.shifts.filter(function (s) { return s.active !== false; }),
         users: atLeast(me, 'lead') ? d.users.map(pub) : [pub(me)],
-        openRecord: mine.filter(function (a) { return !a.checkOut; })[0] || null,
-        pendingAbsence: atLeast(me, 'lead')
-          ? d.absence.filter(function (a) { return a.status === 'Pending'; }).length : 0
+        openRecord: mine.filter(function (a) { return !a.checkOut; })[0] || null
       };
     },
 
@@ -177,7 +168,7 @@
         checkIn: iso(ci), scheduledEnd: iso(new Date(p.scheduledEnd)), checkOut: '',
         durationMin: '', lateMin: late, status: 'Open',
         photoIn: p.photo || '', photoOut: '', station: p.station || '',
-        activity: p.activity || '', handover: '', alerts: '', incidents: '',
+        activity: p.activity || '', handover: '', alerts: '', incidents: '', resolved: '',
         createdAt: iso(new Date())
       };
       d.attendance.push(rec);
@@ -197,6 +188,7 @@
       rec.handover = p.handover || '';
       rec.alerts = p.alerts != null ? p.alerts : '';
       rec.incidents = p.incidents != null ? p.incidents : '';
+      rec.resolved = p.resolved != null ? p.resolved : '';
       if (p.photo) rec.photoOut = p.photo;
       var early = minsBetween(co, rec.scheduledEnd);
       rec.status = rec.lateMin > 0 ? 'Late' : (early > 15 ? 'Early out' : 'On time');
@@ -204,6 +196,31 @@
       rec.earlyMin = early > 0 ? early : 0;
       log(d, me.username, 'check-out', rec.shiftName + ' · ' + rec.date + ' · ' + rec.durationMin + 'm');
       return { record: rec };
+    },
+
+    addActivityUpdate: function (d, p, me) {
+      var rec = d.attendance.filter(function (a) { return a.id === p.recordId; })[0];
+      if (!rec) throw new Error('That shift record was not found.');
+      if (rec.userId !== me.id && !atLeast(me, 'admin')) throw new Error('You can only log activity on your own shift.');
+      if (rec.checkOut) throw new Error('That shift is already signed off.');
+      var type = ['Note', 'Alert', 'Case', 'Resolved'].indexOf(p.type) >= 0 ? p.type : 'Note';
+      var note = String(p.note || '').trim();
+      if (!note) throw new Error('Write something before logging it.');
+      var severity = ['Low', 'Medium', 'High', 'Critical'].indexOf(p.severity) >= 0 ? p.severity : '';
+      var reference = String(p.reference || '').trim().slice(0, 40);
+      var entry = { id: uid('act'), recordId: p.recordId, userId: me.id, name: me.name, ts: iso(new Date()), type: type, note: note, severity: severity, reference: reference };
+      d.activity.push(entry);
+      log(d, me.username, 'activity logged', type + ' · ' + note.slice(0, 80));
+      return { record: entry };
+    },
+
+    listActivityUpdates: function (d, p, me) {
+      var rec = d.attendance.filter(function (a) { return a.id === p.recordId; })[0];
+      if (!rec) throw new Error('That shift record was not found.');
+      if (rec.userId !== me.id && !atLeast(me, 'lead')) throw new Error('Your role does not allow that.');
+      var rows = d.activity.filter(function (a) { return a.recordId === p.recordId; })
+        .slice().sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
+      return { rows: rows };
     },
 
     boardData: function (d, p, me) {
@@ -216,12 +233,7 @@
         o.activity = ''; o.handover = ''; o.photoIn = ''; o.photoOut = '';
         return o;
       });
-      var abs = d.absence.filter(function (a) { return a.status === 'Approved'; }).map(function (a) {
-        if (full || a.userId === me.id) return a;
-        var o = {}; Object.keys(a).forEach(function (k) { o[k] = a[k]; });
-        o.reason = ''; return o;
-      });
-      return { rows: rows, absence: abs };
+      return { rows: rows };
     },
 
     listAttendance: function (d, p, me) {
@@ -242,38 +254,6 @@
       d.attendance = d.attendance.filter(function (a) { return a.id !== p.id; });
       log(d, me.username, 'delete attendance', p.id);
       return { ok: true };
-    },
-
-    createAbsence: function (d, p, me) {
-      var from = new Date(p.from), to = new Date(p.to);
-      if (to < from) throw new Error('The last day cannot fall before the first day.');
-      var rec = {
-        id: uid('abs'), userId: me.id, name: me.name, type: p.type,
-        from: p.from, to: p.to, days: Math.round((to - from) / 864e5) + 1,
-        shiftId: p.shiftId || '', cover: p.cover || '', reason: p.reason || '',
-        status: 'Pending', reviewedBy: '', reviewedAt: '', createdAt: iso(new Date())
-      };
-      d.absence.push(rec);
-      log(d, me.username, 'absence filed', p.type + ' ' + p.from + '→' + p.to);
-      return { record: rec };
-    },
-
-    listAbsence: function (d, p, me) {
-      var rows = d.absence.slice();
-      if (p.mine || !atLeast(me, 'lead')) rows = rows.filter(function (a) { return a.userId === me.id; });
-      rows.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
-      return { rows: rows };
-    },
-
-    reviewAbsence: function (d, p, me) {
-      if (!atLeast(me, 'lead')) throw new Error('Only a shift lead or administrator can review absences.');
-      var rec = d.absence.filter(function (a) { return a.id === p.id; })[0];
-      if (!rec) throw new Error('That absence request was not found.');
-      rec.status = p.decision;
-      rec.reviewedBy = me.name;
-      rec.reviewedAt = iso(new Date());
-      log(d, me.username, 'absence ' + p.decision.toLowerCase(), rec.name + ' · ' + rec.from);
-      return { record: rec };
     },
 
     listUsers: function (d, p, me) {

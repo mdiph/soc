@@ -4,11 +4,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Shift Desk — SOC Attendance</title>
-<meta name="description" content="Shift attendance, absence and coverage tracking for a security operations centre." />
+<meta name="description" content="Shift attendance and coverage tracking for a security operations centre." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/app.css?v=4" />
+<link rel="stylesheet" href="assets/css/app.css?v=7" />
 </head>
 <body data-view="boot">
 
@@ -24,7 +24,7 @@
     <section class="login-brand">
       <p class="eyebrow">Security Operations Centre</p>
       <h1 class="login-title">Shift<br>Desk</h1>
-      <p class="login-sub">Attendance, absence and coverage for a 24/7 watch floor. Sign in with the account your SOC manager issued you.</p>
+      <p class="login-sub">Attendance and coverage for a 24/7 watch floor. Sign in with the account your SOC manager issued you.</p>
       <ul class="login-facts">
         <li><span class="k">Rotation</span><span class="v" id="loginShiftList">—</span></li>
         <li><span class="k">Right now</span><span class="v" id="loginNow">—</span></li>
@@ -140,30 +140,84 @@
       <!-- ---------- CHECK IN ---------- -->
       <section class="view" data-page="checkin">
         <div class="split split-wide">
-          <div class="panel">
+          <div class="panel" id="camPanel">
             <div class="panel-head"><h2>Desk photo</h2><p>A shot at the workstation confirms you are physically on the floor. Stored with the record.</p></div>
-            <div class="cam">
-              <video id="cam" playsinline muted autoplay></video>
-              <canvas id="camCanvas" hidden></canvas>
-              <img id="camShot" alt="Captured desk photo" hidden />
-              <div class="cam-empty" id="camEmpty">
-                <p>Camera is off.</p>
-                <button class="btn btn-ghost btn-sm" id="camStart" type="button">Turn on camera</button>
+
+            <div id="camSummary" class="cam-summary" hidden>
+              <div id="camSummaryPhoto"></div>
+              <div class="cam-summary-txt">
+                <strong>Captured at sign-on</strong>
+                <span>Optional — add another for the sign-off record.</span>
+                <button class="btn btn-ghost btn-sm" id="camAddOut" type="button">Add sign-off photo</button>
               </div>
             </div>
-            <div class="cam-actions">
-              <button class="btn btn-ghost" id="camShoot" type="button" disabled>Capture</button>
-              <button class="btn btn-ghost" id="camRetake" type="button" hidden>Retake</button>
-              <label class="btn btn-ghost file-btn">
-                Upload instead
-                <input type="file" id="camFile" accept="image/*" capture="user" hidden />
-              </label>
+
+            <div id="camCapture">
+              <div class="cam">
+                <video id="cam" playsinline muted autoplay></video>
+                <canvas id="camCanvas" hidden></canvas>
+                <img id="camShot" alt="Captured desk photo" hidden />
+                <div class="cam-empty" id="camEmpty">
+                  <p>Camera is off.</p>
+                  <button class="btn btn-ghost btn-sm" id="camStart" type="button">Turn on camera</button>
+                </div>
+              </div>
+              <div class="cam-actions">
+                <button class="btn btn-ghost" id="camShoot" type="button" disabled>Capture</button>
+                <button class="btn btn-ghost" id="camRetake" type="button" hidden>Retake</button>
+                <label class="btn btn-ghost file-btn">
+                  Upload instead
+                  <input type="file" id="camFile" accept="image/*" capture="user" hidden />
+                </label>
+              </div>
             </div>
           </div>
 
           <div class="panel">
             <div id="ciOpen" hidden>
               <div class="panel-head"><h2>Sign off shift</h2><p>You signed in at <strong id="ciOpenAt" class="mono">—</strong> on the <strong id="ciOpenShift">—</strong> shift.</p></div>
+
+              <div class="activity-log">
+                <div class="activity-log-head">
+                  <h3>Shift activity</h3>
+                  <p>Log anything worth a note as it happens instead of trying to remember it at sign-off — an alert worth a second look, a case raised, an issue resolved.</p>
+                </div>
+                <form id="actForm" class="activity-form">
+                  <div class="row">
+                    <label class="field field-inline">
+                      <span>Type</span>
+                      <select id="actType">
+                        <option value="Note">Note</option>
+                        <option value="Alert">Alert to watch</option>
+                        <option value="Case">Case raised</option>
+                        <option value="Resolved">Issue resolved</option>
+                      </select>
+                    </label>
+                    <label class="field field-inline">
+                      <span>Severity <em>optional</em></span>
+                      <select id="actSeverity">
+                        <option value="">—</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                        <option value="Critical">Critical</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="field field-inline">
+                    <span>Reference <em>optional</em></span>
+                    <input id="actReference" type="text" placeholder="Ticket / case number, e.g. INC-2231" maxlength="40" />
+                  </label>
+                  <label class="field field-inline">
+                    <span>What happened</span>
+                    <textarea id="actNote" rows="2" required maxlength="300" placeholder="Suspicious login from an unfamiliar IP, escalated to lead…"></textarea>
+                  </label>
+                  <p id="actError" class="form-error" hidden></p>
+                  <button class="btn btn-ghost btn-block" type="submit">Log update</button>
+                </form>
+                <div id="actList" class="activity-list"></div>
+              </div>
+
               <form id="checkoutForm">
                 <label class="field">
                   <span>Handover notes <em>required</em></span>
@@ -175,10 +229,14 @@
                     <input id="coAlerts" type="number" min="0" step="1" value="0" />
                   </label>
                   <label class="field">
-                    <span>Incidents escalated</span>
+                    <span>Cases raised <em>was "incidents escalated"</em></span>
                     <input id="coIncidents" type="number" min="0" step="1" value="0" />
                   </label>
                 </div>
+                <label class="field">
+                  <span>Issues resolved</span>
+                  <input id="coResolved" type="number" min="0" step="1" value="0" />
+                </label>
                 <p id="coError" class="form-error" hidden></p>
                 <button class="btn btn-primary btn-block" type="submit">Sign off shift</button>
               </form>
@@ -231,50 +289,6 @@
         </div>
       </section>
 
-      <!-- ---------- ABSENCE ---------- -->
-      <section class="view" data-page="absence">
-        <div class="split split-narrow">
-          <div class="panel">
-            <div class="panel-head"><h2>Report an absence</h2><p>File it before the shift where you can. Your shift lead reviews it.</p></div>
-            <form id="absForm">
-              <label class="field">
-                <span>Reason</span>
-                <select id="absType" required>
-                  <option value="Sick">Sick</option>
-                  <option value="Annual leave">Annual leave</option>
-                  <option value="Permission">Permission</option>
-                  <option value="Training">Training</option>
-                  <option value="Shift swap">Shift swap</option>
-                  <option value="Unplanned">Unplanned / no notice</option>
-                </select>
-              </label>
-              <div class="row">
-                <label class="field"><span>First day</span><input id="absFrom" type="date" required /></label>
-                <label class="field"><span>Last day</span><input id="absTo" type="date" required /></label>
-              </div>
-              <label class="field">
-                <span>Shift affected</span>
-                <select id="absShift"></select>
-              </label>
-              <label class="field">
-                <span>Cover arranged with</span>
-                <input id="absCover" type="text" placeholder="Name of the engineer covering, if any" />
-              </label>
-              <label class="field">
-                <span>Details</span>
-                <textarea id="absReason" rows="3" required placeholder="Short explanation for the shift lead."></textarea>
-              </label>
-              <p id="absError" class="form-error" hidden></p>
-              <button class="btn btn-primary btn-block" type="submit">File absence</button>
-            </form>
-          </div>
-          <div class="panel">
-            <div class="panel-head"><h2>My absence record</h2><p>Filed requests and where they stand.</p></div>
-            <div id="absMine" class="stack"></div>
-          </div>
-        </div>
-      </section>
-
       <!-- ---------- TEAM LOG ---------- -->
       <section class="view" data-page="team">
         <div class="panel">
@@ -297,14 +311,6 @@
             <button class="btn btn-primary btn-sm" id="exportBtn" type="button">Export .xlsx</button>
           </div>
           <div class="table-wrap"><table class="grid" id="teamTable"></table></div>
-        </div>
-      </section>
-
-      <!-- ---------- APPROVALS ---------- -->
-      <section class="view" data-page="approvals">
-        <div class="panel">
-          <div class="panel-head"><h2>Absence approvals</h2><p>Pending first. Approving marks the shift as authorised absence rather than a no-show.</p></div>
-          <div id="approvalList" class="stack"></div>
         </div>
       </section>
 
@@ -400,9 +406,9 @@
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="assets/js/config.js?v=4"></script>
-<script src="assets/js/backend-demo.js?v=4"></script>
-<script src="assets/js/api.js?v=4"></script>
-<script src="assets/js/app.js?v=4"></script>
+<script src="assets/js/config.js?v=7"></script>
+<script src="assets/js/backend-demo.js?v=7"></script>
+<script src="assets/js/api.js?v=7"></script>
+<script src="assets/js/app.js?v=7"></script>
 </body>
 </html>

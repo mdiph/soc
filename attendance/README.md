@@ -1,6 +1,6 @@
-# Shift Desk — SOC attendance & absence
+# Shift Desk — SOC attendance
 
-Attendance, absence and shift-coverage tracking for a 24/7 security operations centre.
+Attendance and shift-coverage tracking for a 24/7 security operations centre.
 Frontend runs on GitHub Pages. Records land in a Google Sheet.
 
 ---
@@ -17,9 +17,9 @@ DevTools and read the password list. So the app splits in two:
   index.html                      doPost() router               Users
   app.css        ──── fetch ───▶  password hashing      ────▶   Shifts
   app.js                          session tokens                Attendance
-  (public, no secrets)            role checks                   Absence
-                                  photo → Drive                 Sessions
-                                                                AuditLog
+  (public, no secrets)            role checks                   Sessions
+                                  photo → Drive                 AuditLog
+                                                                ActivityLog
 ```
 
 Passwords are hashed and roles are enforced **inside Apps Script**, where the browser
@@ -150,11 +150,10 @@ can't use, but the enforcement is in Apps Script, not the menu.
 | | Engineer | Shift lead | Admin |
 |---|:---:|:---:|:---:|
 | Sign on / sign off own shift | ● | ● | ● |
-| See own log and file absence | ● | ● | ● |
+| See own log | ● | ● | ● |
 | Coverage board — names and times | ● | ● | ● |
 | Colleagues' handover notes, photos, activity | ○ | ● | ● |
 | Full team log, filters, `.xlsx` export | ○ | ● | ● |
-| Approve or reject absence | ○ | ● | ● |
 | Add, edit, disable accounts | ○ | ○ | ● |
 | Edit the shift pattern | ○ | ○ | ● |
 | Delete a shift record | ○ | ○ | ● |
@@ -173,7 +172,7 @@ opening activity. Sign-off adds the rest:
 | Field | Why it's there |
 |---|---|
 | Handover notes *(required)* | The single most useful thing in a SOC shift log. You can't sign off without one. |
-| Alerts triaged / incidents escalated | Turns attendance into workload data — you can see whether the night shift is drowning. |
+| Alerts triaged / cases raised / issues resolved | Turns attendance into workload data — you can see whether the night shift is drowning. Pre-filled from the shift activity log below, but stay editable. |
 | Late minutes | Measured against shift start **plus a per-shift grace period**, so a 3-minute overrun isn't a mark against anyone. |
 | Early out | Flagged when sign-off is more than 15 minutes before scheduled end. |
 | Workstation | Distinguishes on-site from `Remote / VPN`. |
@@ -181,6 +180,24 @@ opening activity. Sign-off adds the rest:
 
 Night shifts that cross midnight are filed against the date the shift **started**, so
 a 22:00–06:00 shift stays one row instead of splitting across two days.
+
+### Shift activity log
+
+While signed on, the *Shift check-in* page shows a **Log update** box: pick a type
+(Note, Alert, Case raised, Issue resolved), optionally a severity and a ticket/case
+reference, write a line, and it's timestamped against the open shift immediately — no
+need to remember it all at sign-off. Entries land in a separate `ActivityLog` tab
+(`record_id` ties each entry back to its shift), and the counts of Alert/Case/Resolved
+entries pre-fill the sign-off counters automatically.
+
+The desk-photo camera only actually matters twice — the sign-on shot, and an optional
+one at sign-off — so once you're signed on it collapses to a small thumbnail of what was
+already captured, and *Add sign-off photo* brings the full camera back on demand. That
+gives the activity log the space instead of a live camera preview sitting idle.
+
+Both **My log** and **Team log** truncate the handover text to fit a table cell — click
+**Details** on any row for the full picture: both photos, opening activity, handover,
+the Alerts/Cases/Resolved counters, and the complete activity log for that shift.
 
 ---
 
@@ -225,8 +242,11 @@ Read these before putting real staff data in it.
 - **A "Anyone" web app URL is unauthenticated by design.** Anyone with the URL can
   reach the endpoint. Every action past `login` demands a valid session token, so the
   data is protected, but the endpoint is reachable. Treat the URL as semi-secret.
-- **No rate limiting on login.** For a small SOC roster that's usually fine. If it
-  matters, add a failed-attempt counter per username in the Sheet and lock after five.
+- **Login lockout.** Five wrong passwords in a row locks that account for 15 minutes —
+  checked before the password itself, so a correct guess during the lockout still
+  doesn't get in. An admin resetting the password (*Roster & shifts → Engineers →
+  Edit*) clears the lockout immediately rather than making the user wait it out.
+  Tune `MAX_LOGIN_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` at the top of `Code.gs`.
 - **Photos in Drive are shared "anyone with the link."** Unguessable, but not private.
   If your Workspace blocks link-sharing, `savePhoto` degrades gracefully and stores an
   empty link rather than failing the sign-on.
@@ -268,6 +288,11 @@ attached to your Google Sheet (Part 1). The copy in the repo is for version hist
 for whoever maintains this after you. Editing it here changes nothing until you paste it
 back in and redeploy.
 
+**Whenever `Code.gs` adds a sheet or a column** (as it did for the `ActivityLog` tab and
+the `issues_resolved` column), paste the updated code in and run **`setup`** from the
+function dropdown again before redeploying — it's safe to re-run any time; it only adds
+what's missing and never touches existing rows.
+
 All asset paths in `index.html` are relative, so the app works at any depth — root,
 `/soc/attendance/`, or anywhere else you move it. Nothing hard-codes the URL.
 
@@ -293,6 +318,20 @@ Demo data lives in your browser. Clearing site data resets it.
 *Anyone*, or you're using the `/dev` URL. Use `/exec`.
 
 **Changes to `Code.gs` do nothing** — you didn't redeploy a new version. See Part 1.
+
+**Date column shows "Invalid Date" on My Log** — a handful of Sheets quirks can make a
+cell that should hold a plain calendar day ("2026-08-26") come back as an actual Date
+value instead of text, even with the column formatted as Plain Text (that format only
+governs values entered from now on, not ones already stored as a date). Fixed by reading
+that column defensively — redeploy the current `Code.gs` and it self-corrects on the
+next read, no need to touch the Sheet.
+
+**Photo shows as a broken image or just the words "Attendance photo"** — records written
+before this fix used `drive.google.com/uc?export=view`, a link format Google now blocks
+from loading inside an `<img>` tag for most files, so the browser falls back to the alt
+text. New sign-ons use `drive.google.com/thumbnail?id=…`, which still works. Old photo
+links already saved in the Sheet won't retroactively fix themselves — re-share/re-upload
+if an old one matters, or leave it; it's cosmetic on historical rows.
 
 **Camera won't open** — `getUserMedia` needs HTTPS. GitHub Pages is HTTPS, so this is
 fine in production, but a page opened as `file://` won't work. Use *Upload instead*, or
