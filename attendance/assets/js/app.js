@@ -168,7 +168,6 @@
   async function enterApp() {
     var stage = 'bootstrap';
     try {
-    console.log('[shiftdesk] enterApp: bootstrap');
     var b = await window.API.call('bootstrap', {});
     stage = 'state';
     S.user = b.user;
@@ -183,7 +182,6 @@
     S.boardDate = ymd(new Date());
 
     stage = 'show app';
-    console.log('[shiftdesk] enterApp: showing app');
     document.body.dataset.view = 'app';
     $('#login').hidden = true;
     $('#app').hidden = false;
@@ -197,7 +195,6 @@
     stage = 'shiftSelects'; fillShiftSelects();
     stage = 'clock';       tickClock();
     stage = 'render page'; go(S.page === 'board' ? 'board' : S.page);
-    console.log('[shiftdesk] enterApp: complete');
     } catch (err) {
       console.error('[shiftdesk] enterApp FAILED at stage "' + stage + '":', err);
       throw new Error('Sign-in failed while loading the app (' + stage + '): ' + err.message);
