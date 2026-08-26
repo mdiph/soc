@@ -2,18 +2,118 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SOC tools</title>
-<meta http-equiv="refresh" content="0; url=attendance/">
-<link rel="canonical" href="attendance/">
 <style>
-  body{margin:0;min-height:100dvh;display:grid;place-content:center;gap:14px;
-       background:#0E1119;color:#868FA8;font:15px/1.5 system-ui,sans-serif;text-align:center}
-  a{color:#FFB020}
+:root{
+  --ink:#060D18; --panel:#0D1826; --panel-2:#111F31; --line:#1E3149;
+  --copper:#C98A3E; --copper-dim:#8A5F2B; --steel:#6FA3D6;
+  --paper:#E6EDF5; --muted:#8B9EB5;
+  --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100dvh;
+  background:
+    radial-gradient(1100px 620px at 78% -12%, rgba(111,163,214,.13), transparent 62%),
+    radial-gradient(760px 480px at 6% 4%, rgba(201,138,62,.10), transparent 60%),
+    var(--ink);
+  color:var(--paper); font-family:var(--sans); font-size:15px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--steel)}
+
+.masthead{
+  border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,24,38,.96),rgba(6,13,24,.72));
+}
+.masthead-in{max-width:1100px;margin:0 auto;padding:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.mark{width:34px;height:26px;flex:none}
+.wordmark{display:flex;flex-direction:column;line-height:1.05}
+.wordmark b{font-weight:600;letter-spacing:.30em;font-size:14px}
+.wordmark span{font-size:10px;letter-spacing:.34em;color:var(--copper);text-transform:uppercase}
+.rule-v{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.masthead h1{font-size:16px;margin:0 0 2px;font-weight:600}
+.masthead p{margin:0;color:var(--muted);font-size:13px}
+
+main{max-width:1100px;margin:0 auto;padding:40px 22px 60px}
+.intro{max-width:640px;margin:0 0 32px}
+.intro h2{font-size:22px;margin:0 0 8px}
+.intro p{color:var(--muted);margin:0}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.card{
+  display:flex;flex-direction:column;gap:12px;
+  background:linear-gradient(180deg,rgba(17,31,49,.9),rgba(13,24,38,.9));
+  border:1px solid var(--line); border-radius:14px; padding:22px;
+  text-decoration:none; color:var(--paper);
+  transition:border-color .15s ease, transform .15s ease, background .15s ease;
+}
+.card:hover{border-color:var(--copper-dim); transform:translateY(-2px); background:linear-gradient(180deg,rgba(17,31,49,1),rgba(13,24,38,1))}
+.card .icon{
+  width:40px;height:40px;border-radius:10px;display:grid;place-items:center;
+  background:rgba(201,138,62,.12); border:1px solid var(--line); color:var(--copper);
+}
+.card h3{margin:0;font-size:17px;font-weight:600}
+.card p{margin:0;color:var(--muted);font-size:13.5px;flex:1}
+.card .go{font-size:12.5px;color:var(--steel);letter-spacing:.02em}
+.card .go::after{content:" →"}
+
+footer{max-width:1100px;margin:0 auto;padding:0 22px 40px;color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
-  <p>Taking you to the attendance console…</p>
-  <p><a href="attendance/">Continue</a></p>
-  <script>location.replace('attendance/');</script>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <svg class="mark" viewBox="0 0 40 30" aria-hidden="true"><rect x="4" y="4" width="32" height="22" rx="3" fill="none" stroke="#C98A3E" stroke-width="2.6"/><path d="M11 20l5-8 4 5 4-6 5 9" stroke="#C98A3E" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="wordmark"><b>SOC</b><span>Dashboard</span></div>
+    <div class="rule-v"></div>
+    <div>
+      <h1>SOC tools</h1>
+      <p>Attendance, reporting and executive summaries for the security operations centre.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="intro">
+    <h2>Pick a tool</h2>
+    <p>Three independent apps that share one roof. Each opens on its own — nothing here logs you in or carries state between them.</p>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="attendance/">
+      <div class="icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <h3>Attendance</h3>
+      <p>Sign on / off, shift coverage, absences and the audit trail. Records land in a Google Sheet.</p>
+      <span class="go">Open console</span>
+    </a>
+
+    <a class="card" href="daily-report/">
+      <div class="icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 3h9l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.8"/><path d="M8 12h8M8 16h8M8 8h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <h3>Daily report</h3>
+      <p>Load the shift's alert export, fill in the details, generate the L1 daily Word report.</p>
+      <span class="go">Open builder</span>
+    </a>
+
+    <a class="card" href="exec-summary/">
+      <div class="icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 19V5M4 19h16M8 19v-6M13 19v-9M18 19v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Exec summary</h3>
+      <p>Roll two weeks of reports into a bi-weekly executive summary deck and workbook.</p>
+      <span class="go">Open builder</span>
+    </a>
+  </div>
+</main>
+
+<footer>pradigta.com/soc</footer>
+
 </body>
 </html>
