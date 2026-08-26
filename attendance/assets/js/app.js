@@ -166,7 +166,11 @@
   }
 
   async function enterApp() {
+    var stage = 'bootstrap';
+    try {
+    console.log('[shiftdesk] enterApp: bootstrap');
     var b = await window.API.call('bootstrap', {});
+    stage = 'state';
     S.user = b.user;
     S.shifts = (b.shifts || []).map(function (s) {
       var a = hmParts(s.start), z = hmParts(s.end);
@@ -178,18 +182,26 @@
     S.open = b.openRecord; S.pending = b.pendingAbsence || 0;
     S.boardDate = ymd(new Date());
 
+    stage = 'show app';
+    console.log('[shiftdesk] enterApp: showing app');
     document.body.dataset.view = 'app';
     $('#login').hidden = true;
     $('#app').hidden = false;
 
+    stage = 'identity';
     $('#whoName').textContent = S.user.name;
     $('#whoRole').textContent = S.user.role === 'lead' ? 'Shift lead' : S.user.role;
     $('#whoAv').textContent = initials(S.user.name);
 
-    buildNav();
-    fillShiftSelects();
-    tickClock();
-    go(S.page === 'board' ? 'board' : S.page);
+    stage = 'buildNav';    buildNav();
+    stage = 'shiftSelects'; fillShiftSelects();
+    stage = 'clock';       tickClock();
+    stage = 'render page'; go(S.page === 'board' ? 'board' : S.page);
+    console.log('[shiftdesk] enterApp: complete');
+    } catch (err) {
+      console.error('[shiftdesk] enterApp FAILED at stage "' + stage + '":', err);
+      throw new Error('Sign-in failed while loading the app (' + stage + '): ' + err.message);
+    }
   }
 
   $('#loginForm').addEventListener('submit', async function (e) {
@@ -200,6 +212,7 @@
       await window.API.login($('#loginUser').value.trim(), $('#loginPass').value);
       await enterApp();
     } catch (err) {
+      console.error('[shiftdesk] login handler caught:', err, err && err.stack);
       showErr('#loginError', err.message);
     } finally { busy(btn, false); }
   });
