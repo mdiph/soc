@@ -11,7 +11,7 @@ window.SHIFTDESK_CONFIG = {
 
   // Paste your Apps Script deployment URL here, e.g.
   // "https://script.google.com/macros/s/AKfycb.../exec"
-  API_URL: "",
+  API_URL: "https://script.google.com/macros/s/AKfycbwza77_BZkkSOQ-jSOZQPQtL4O4At4xMzDLNyBlnJ5MOfZ0RnF-068aX-aH_RXZ5QmytQ/exec",
 
   // Shown on the login screen and in exports.
   ORG_NAME: "Security Operations Centre",
