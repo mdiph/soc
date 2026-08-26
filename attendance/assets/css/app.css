@@ -36,6 +36,11 @@
 
 *,*::before,*::after{ box-sizing:border-box; }
 
+/* The `hidden` attribute must beat the layout rules below. Without this,
+   `.login{display:grid}` and `.app{display:grid}` override the browser's
+   [hidden]{display:none}, and both panels render stacked. */
+[hidden]{ display:none !important; }
+
 html,body{ height:100%; }
 body{
   margin:0;
