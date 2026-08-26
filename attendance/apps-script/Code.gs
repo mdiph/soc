@@ -41,6 +41,11 @@ function setup() {
     sh.getRange(2, 1, sh.getMaxRows() - 1, cols.length).setNumberFormat('@');
   });
 
+  // Columns C and D of Shifts hold "06:00" strings. Without an explicit text
+  // format Sheets converts them to time values, which read back as 1899 dates.
+  var shSheet = ss.getSheetByName(TITLES.shifts);
+  shSheet.getRange(2, 3, shSheet.getMaxRows() - 1, 2).setNumberFormat('@');
+
   if (readAll('shifts').length === 0) {
     appendRow('shifts', { shift_id:'sh-morning', name:'Morning', start:'06:00', end:'14:00', grace_min:10, min_engineers:2, active:'TRUE' });
     appendRow('shifts', { shift_id:'sh-evening', name:'Evening', start:'14:00', end:'22:00', grace_min:10, min_engineers:2, active:'TRUE' });
@@ -178,11 +183,26 @@ function pubUser(u) {
 
 function pubShift(s) {
   return {
-    id: s.shift_id, name: s.name, start: s.start, end: s.end,
+    id: s.shift_id, name: s.name, start: asHM(s.start), end: asHM(s.end),
     grace: Number(s.grace_min) || 0, min: Number(s.min_engineers) || 1,
     active: String(s.active).toUpperCase() !== 'FALSE'
   };
 }
+
+/* Sheets happily reinterprets "06:00" as a time value, which comes back as
+   an 1899 date. Accept whatever the cell holds and return plain "HH:MM". */
+function asHM(v) {
+  if (v === null || v === undefined || v === '') return '00:00';
+  var str = String(v);
+  var m = str.match(/^(\d{1,2}):(\d{2})/);                       // already "HH:MM"
+  if (m) return pad2(m[1]) + ':' + pad2(m[2]);
+  m = str.match(/T(\d{2}):(\d{2})/);                             // ISO timestamp
+  if (m) return m[1] + ':' + m[2];
+  var d = new Date(str);
+  if (!isNaN(d.getTime())) return pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+  return '00:00';
+}
+function pad2(n) { return ('0' + n).slice(-2); }
 
 function pubAtt(a) {
   return {
@@ -492,6 +512,20 @@ var HANDLERS = {
 };
 
 /* ================= housekeeping ================= */
+
+/* Run once if your Shifts tab shows dates or times instead of plain "06:00".
+   Rewrites both columns as text and restores the HH:MM values. */
+function repairShiftTimes() {
+  var sh = sheet('shifts');
+  var rows = readAll('shifts');
+  sh.getRange(2, 3, Math.max(1, sh.getMaxRows() - 1), 2).setNumberFormat('@');
+  rows.forEach(function (r) {
+    sh.getRange(r._row, 3).setValue(asHM(r.start));
+    sh.getRange(r._row, 4).setValue(asHM(r.end));
+  });
+  var ui; try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+  if (ui) ui.alert('Repaired ' + rows.length + ' shift rows.\n\nReload the app and sign in again.');
+}
 
 function purgeSessions() {
   var now = new Date();
