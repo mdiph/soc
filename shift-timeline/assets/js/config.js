@@ -13,7 +13,7 @@ window.ROSTER_CONFIG = {
   // Paste your Apps Script deployment URL here, e.g.
   // "https://script.google.com/macros/s/AKfycb.../exec"
   // Empty string  ->  local mode (localStorage only).
-  API_URL: "",
+  API_URL: "https://script.google.com/macros/s/AKfycbwFWHLKa8PvDFoDYNufzPMdTdht8qMUfTyoy5EcAfgeCnyDKvwrFLVUdKYcVGhr9fN0/exec",
 
   // Shown in the header and on exports.
   ORG_NAME: "Security Operations Centre",
