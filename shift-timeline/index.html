@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Shift Timeline — SOC L1</title>
+<meta name="description" content="The monthly shift rotation for a security operations centre — see what you're on today and what's next." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css?v=15" />
+</head>
+<body>
+
+<div id="boot" class="boot">
+  <div class="boot-mark">SHIFT TIMELINE</div>
+  <div class="boot-bar"><span></span></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <b>Shift Timeline</b>
+    <span id="teamTag">SOC L1</span>
+  </div>
+  <div class="top-actions">
+    <button class="btn btn-ghost btn-sm" id="printBtn" type="button">Print</button>
+    <button class="btn btn-ghost btn-sm" id="authBtn" type="button">Sign in</button>
+  </div>
+</header>
+
+<div id="conflictBanner" class="banner" hidden></div>
+
+<main class="wrap">
+
+  <!-- month navigation — everyone -->
+  <div class="monthbar">
+    <button class="btn btn-icon" id="mPrev" type="button" aria-label="Previous month">‹</button>
+    <select id="mSelect" aria-label="Month"></select>
+    <button class="btn btn-icon" id="mNext" type="button" aria-label="Next month">›</button>
+    <span id="monthNote" class="month-note"></span>
+
+    <span class="spacer"></span>
+
+    <span id="editActions" class="edit-actions" hidden>
+      <span id="editState" class="edit-state"></span>
+      <button class="btn btn-ghost btn-sm" id="newMonthBtn" type="button">New month</button>
+      <button class="btn btn-ghost btn-sm" id="openingBtn" type="button" hidden>Starting point</button>
+      <button class="btn btn-ghost btn-sm" id="engBtn" type="button">Engineers</button>
+      <button class="btn btn-ghost btn-sm" id="genBtn" type="button">Generate</button>
+      <button class="btn btn-ghost btn-sm" id="xlsxBtn" type="button">Export .xlsx</button>
+      <button class="btn btn-primary btn-sm" id="saveBtn" type="button">Save</button>
+    </span>
+  </div>
+
+  <!-- personal lens — pick your name -->
+  <section class="lens">
+    <div class="lens-pick">
+      <label for="mePick">My shifts</label>
+      <select id="mePick"><option value="">Pick your name…</option></select>
+      <span id="lensHint" class="hint" style="margin:0">— or click your name in the timeline. See what you're on today and what's next.</span>
+    </div>
+
+    <div id="lensBody" hidden>
+      <div class="lens-cards">
+        <div class="daycard" id="cardToday">
+          <span class="k">Today · <span id="todayDate">—</span></span>
+          <span class="v" id="todayShift">—</span>
+          <span class="w" id="todayWindow">—</span>
+        </div>
+        <div class="daycard" id="cardTomorrow">
+          <span class="k">Tomorrow · <span id="tmrDate">—</span></span>
+          <span class="v" id="tmrShift">—</span>
+          <span class="w" id="tmrWindow">—</span>
+        </div>
+        <div class="lens-next">
+          <span class="k">Then</span>
+          <div class="upnext" id="upNext"></div>
+        </div>
+        <div class="lens-cov">
+          <span class="k">On with you today</span>
+          <div class="coverage" id="todayCoverage"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- the timeline itself -->
+  <div class="print-only print-head" id="printHead"></div>
+
+  <div class="grid-scroll">
+    <table class="rota" id="rotaTable"></table>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw sw-M"></i>Morning · 07:00–15:00</span>
+    <span><i class="sw sw-A"></i>Afternoon · 15:00–23:00</span>
+    <span><i class="sw sw-N"></i>Night · 23:00–07:00</span>
+    <span><i class="sw sw-O"></i>Off</span>
+    <span id="editLegend" class="hint" style="margin:0" hidden>· click a cell to change its shift · click the 🔒 corner to lock it for the generator</span>
+  </div>
+
+  <div id="genNotes"></div>
+
+  <!-- edit-only panels -->
+  <div class="cols" id="editPanels" hidden>
+    <div class="panel">
+      <h2>Per engineer</h2>
+      <p class="sub">Shift counts for the month. A flag means fewer than <span id="minOffTxt">8</span> Off days.</p>
+      <table class="tally" id="tallyTable"></table>
+    </div>
+    <div class="panel">
+      <h2>Conflicts <span id="probCounts"></span></h2>
+      <p class="sub">Red = hard rule broken. Amber = worth a look. Click to jump to the cell.</p>
+      <div class="problems" id="problemList"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ ENGINEERS MODAL ============ -->
+<div id="engModal" class="modal" hidden>
+  <div class="modal-box">
+    <button class="modal-close" id="engClose" type="button" aria-label="Close">×</button>
+    <h2>Engineers</h2>
+    <p class="sub">The roster list. Order sets who is which team in the generator. Deactivate someone who has left — past months keep them.</p>
+    <div class="eng-list" id="engList"></div>
+    <button class="btn btn-ghost btn-sm" id="engAdd" type="button">+ Add engineer</button>
+    <p id="engError" class="form-error" hidden></p>
+    <div style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="engCancel" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="engSave" type="button">Save engineers</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ UNLOCK MODAL ============ -->
+<div id="unlockModal" class="modal" hidden>
+  <div class="modal-box">
+    <button class="modal-close" id="unlockClose" type="button" aria-label="Close">×</button>
+    <h2>Sign in to edit</h2>
+    <p class="sub">The edit password lets you generate and change the schedule. Without it you can still see the whole timeline.</p>
+    <form id="unlockForm">
+      <label class="field"><span>Edit password</span><input id="unlockPass" type="password" autocomplete="current-password" /></label>
+      <p id="unlockError" class="form-error" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<!-- ============ OPENING-STATE MODAL ============ -->
+<div id="openingModal" class="modal" hidden>
+  <div class="modal-box">
+    <button class="modal-close" id="openingClose" type="button" aria-label="Close">×</button>
+    <h2 id="openingTitle">Where is everyone right now?</h2>
+    <p class="sub">
+      This is the first month, so there's no previous schedule to continue from.
+      Tell the tool what each engineer worked <b>the day before this month starts</b>
+      and how many days straight they've been on it. That's the only way it can
+      apply the rest rules to the first few days — e.g. someone finishing their
+      third night in a row must get an Off on day 1, not another night or a morning.
+    </p>
+    <p class="sub" style="color:var(--dim-2)">
+      Don't know? Leave everyone on <b>Off</b> — the first 3 days just won't be
+      checked against history, which is usually fine.
+    </p>
+    <div id="openingList"></div>
+    <p id="openingError" class="form-error" hidden></p>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="openingCancel" type="button">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="openingSave" type="button">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="assets/js/config.js?v=15"></script>
+<script src="assets/js/rota.js?v=15"></script>
+<script src="assets/js/api.js?v=15"></script>
+<script src="assets/js/app.js?v=15"></script>
+</body>
+</html>
